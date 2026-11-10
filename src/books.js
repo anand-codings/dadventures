@@ -54,7 +54,27 @@ const ARC_IDS = ARC_STAGES.map((a) => a.id);
 const arcLabel = (id) => ARC_STAGES.find((a) => a.id === id)?.label || '';
 const STORYLINE_FIELDS = [['want', 'Want'], ['obstacle', 'Obstacle'], ['turningPoint', 'Turning point'], ['resolution', 'Resolution'], ['change', 'What changes']];
 // Planning notes kept for every page; they feed the page text and the picture prompt.
-const PAGE_META = [['purpose', 500], ['setting', 300], ['emotion', 200], ['continuity', 600], ['state', 700]];
+const PAGE_META = [['purpose', 500], ['setting', 300], ['emotion', 200], ['continuity', 600], ['state', 700], ['focus', 200], ['turn', 300]];
+// How close the camera is. Planned per page in the outline so the rhythm of the pictures can be seen before any are drawn.
+export const SHOTS = [
+  { id: 'wide', label: 'Wide', hint: 'the whole place, characters small in it' },
+  { id: 'medium', label: 'Medium', hint: 'characters head to foot, with some of the place' },
+  { id: 'close', label: 'Close-up', hint: 'a face, a hand or one object fills the picture' },
+];
+const SHOT_IDS = SHOTS.map((x) => x.id);
+const shotLabel = (id) => SHOTS.find((x) => x.id === id)?.label || '';
+// The read-aloud devices of a book, kept as their own fields so the writer and the editor can hold every page to them.
+const VOICE_FIELDS = [['refrain', 300], ['device', 300]];
+const countWords = (t) => (String(t || '').trim() ? String(t).trim().split(/\s+/).length : 0);
+// How far a word count is outside the audience's range (0 = inside).
+const offRange = (n, [lo, hi]) => (n < lo ? lo - n : n > hi ? n - hi : 0);
+// The style guide as the image model should read it: only how pictures look. Sentences about the words on the page
+// (word counts, reading aloud) are writing notes that strayed in, and would otherwise ride along in every picture prompt.
+const WRITING_NOTE = /\bread[- ]aloud\b|\bwords? (?:per|on (?:a|each|every)) page\b|\b\d+\s*(?:[–-]|to)\s*\d+\s+(?:\w+\s+){0,2}words\b|\bword (?:count|range)\b/i;
+export const visualStyle = (style) => String(style || '').split(/(?<=[.!?])\s+/).filter((x) => !WRITING_NOTE.test(x)).join(' ').trim();
+// Two pages are in the same place when their settings start with the same place name ("the kelp patch; morning" / "the kelp patch; dusk").
+const placeKey = (setting) => String(setting || '').split(/[;(—]| - /)[0].toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const plain = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ');
 const MAX_PAGES = 32;
 
 const OUTLINE_INSTRUCTIONS = `You are an award-winning children's picture-book author and editor. From the user's brief, plan a short illustrated story book.
@@ -64,11 +84,13 @@ Craft rules:
 - Each page is one beat: one moment that can be shown in a single illustration. Vary the beats (action, emotion, quiet moments, a page-turn surprise).
 - Keep the cast small (usually 1–4 characters). If the brief lists existing characters, use them with exactly those names and do not change their appearance.
 - Everything must be age-appropriate for the stated audience, kind, and free of scary or violent content beyond gentle tension.
-- styleGuide: one paragraph describing the illustration style that every page will share (medium, line, color palette, lighting, mood, level of detail, backgrounds). If the brief names a style, build on it; if existing characters have an art style, match it.
+- styleGuide: one paragraph describing the illustration style that every page will share (medium, line, color palette, lighting, mood, level of detail, backgrounds). If the brief names a style, build on it; if existing characters have an art style, match it. It says only how the pictures look: never mention the words on the page, how many there are, reading aloud or lettering in it.
 - cast descriptions: concrete visual details an illustrator can repeat on every page (species or type, size, colors, clothing, distinctive features) plus a few words of personality.
 - coverIllustration: the cover scene, with room for the title at the top.
 - tone: two to four words. If the brief gives a tone, keep it.
 - storyline: the spine of the story in five short lines. want: what the main character wants. obstacle: what stands in the way. turningPoint: the moment everything changes. resolution: how it ends. change: how the main character or their world is different at the end.
+- refrain: the one line a child will join in with, in its exact words (three to eight words), used on at least three pages and echoed, perhaps with a small twist, on the last. Empty string when a refrain does not suit the book.
+- device: the one other read-aloud device the whole book keeps up, in a short line (counting up, a sound word for each place, rhyming couplets, a question on every page, a closing line). If the brief's notes ask for a device or a refrain, use that. Empty string when there is none.
 - world: the setting bible, one short paragraph. Where and when the story happens, the places it returns to, and the recurring objects with a fixed look (colors, sizes, materials), so that every picture can match. If the brief gives a setting, build on it.
 
 Plan every page in full; these notes are what the writer and the illustrator work from, and the illustrator sees one page at a time:
@@ -79,6 +101,9 @@ Plan every page in full; these notes are what the writer and the illustrator wor
 - setting: the specific place plus time of day or weather. Use the same wording for pages in the same place.
 - emotion: the main character's feeling and the mood of the page, in a few words.
 - continuity: what carries over from earlier pages and must be visible here (an object being carried, a change to how a character looks, something found, built or broken, the light getting later). Empty string when nothing carries over.
+- shot: how close the picture is: ${SHOTS.map((x) => `${x.id} (${x.hint})`).join(', ')}. Plan the shots as a rhythm across the book: open wide to show the world, go close for the strongest feelings and the turning point, and never use the same shot on three pages in a row.
+- focus: the one thing the eye should land on first in this page's picture (a face, an object, a gap between two characters), in a few words.
+- turn: the page-turn hook, where the page has one: what the reader is left wondering or waiting for as the page is turned, which the NEXT page answers at once (a sound with no source yet, a door half open, a reach that has not landed, a question just asked). One short line; empty string for pages that simply rest. Give at least one page in four a hook, always including the page before the turning point, and never the last page.
 - state: where things stand at the END of this page, as plain facts a picture could get wrong: where each cast member is (say plainly who is inside, under or behind something and so cannot be seen from outside, and why), who is holding or carrying whom or what, what is blocked, open, stuck or moved, and how much light is left. Two to four short sentences, using the same names as the cast and the settings. A fact repeats unchanged from page to page until that page's beat changes it.
 
 Story logic — the story must survive a sharp five-year-old who keeps asking "but why?":
@@ -133,22 +158,24 @@ const PROOF_SCHEMA = {
 
 const SCRIPT_INSTRUCTIONS = `You are a children's picture-book author working with an illustrator. You are given a book plan (title, theme, cast, style, and a beat for every page). Write the final on-page text and an illustration brief for the requested pages.
 
-Each page comes with planning notes: its stage on the story arc, its purpose, who is in it, the setting, the feeling, what carries over from earlier pages, and its "state" (the facts at the END of that page: who is where, who holds what, what is blocked or open, the light). Follow them. The text serves the page's purpose and feeling.
+Each page comes with planning notes: its stage on the story arc, its purpose, who is in it, the setting, the feeling, what carries over from earlier pages, and its "state" (the facts at the END of that page: who is where, who holds what, what is blocked or open, the light). Each page may also carry a planned shot and focus for its picture, and a page-turn hook. Follow them. The text serves the page's purpose and feeling.
 
 Rules for "text" (the words printed on the page):
 - Fit the audience's word range per page exactly; read-aloud rhythm matters. Use repetition, sound words and gentle humor where it fits the tone.
 - Keep continuity with the surrounding pages: names, facts and tone must match. Do not repeat what the picture already shows; let the words and picture work together.
 - No headings, page numbers, or stage directions in the text.
+- Refrain: when the plan gives a refrain, print it word for word on the pages where it belongs, at least three times across the book and on or just before the last page (a small, deliberate twist on its last use is welcome; an accidental change of wording is not). Device: when the plan names one, keep it going on every page it fits.
+- Page turns: a page whose notes carry a page-turn hook ends on that hook and stops short of the answer; the next page opens by answering it.
 
 Rules for "illustration" (sent to the image model; it never sees other pages):
-- The illustrator sees ONE page at a time and knows nothing else about the story, so each brief is complete: 60–110 words describing one single moment, in this fixed order: (1) where we are, naming the place from the planning notes and the part of it, with the landmark that matters and the time of day; (2) every character in the picture and exactly where each one is — left or right, in front or behind, inside or outside, on top of or under what; (3) what each is doing with which part of its body, and the one feeling on its face; (4) the state of every important object — who holds it, what is blocked, stuck, open, shut or out of reach, and by how much, including every carry-over detail; (5) how close the camera is and from where (wide, medium, close-up). Describe what is SEEN, not what it means.
+- The illustrator sees ONE page at a time and knows nothing else about the story, so each brief is complete: 60–110 words describing one single moment, in this fixed order: (1) where we are, naming the place from the planning notes and the part of it, with the landmark that matters and the time of day; (2) every character in the picture and exactly where each one is — left or right, in front or behind, inside or outside, on top of or under what; (3) what each is doing with which part of its body, and the one feeling on its face; (4) the state of every important object — who holds it, what is blocked, stuck, open, shut or out of reach, and by how much, including every carry-over detail; (5) how close the camera is and from where: use the page's planned shot (wide, medium, close-up) and make its planned focus the clearest thing in the picture; when none is planned, choose them so that no three pages in a row share a shot. Describe what is SEEN, not what it means.
+- Leave out what is supplied separately with every picture: do not describe the art style, rendering, line or colour treatment, and do not say where to leave room for the words. Call a recurring place or object by the name the world note gives it and do not re-describe its fixed look (colours, size, material); say only where it is and what state it is in on this page.
 - Story state: the page's "state" gives the facts at the END of that page; the state of the page before it gives the facts as this page begins. The brief must agree with both. A character the state puts inside, under or behind something is drawn only there: if the picture looks in at them, say so in the brief ("seen through the gap, deep inside the hollow") and list them in "characters"; otherwise leave them out of the brief and out of "characters". Everyone and everything the page text names as present is in the brief.
 - Refer to characters by name only; do not redescribe their appearance (their look is supplied separately).
 - Never ask for text, letters or speech bubbles in the picture.
-- Vary framing across pages so the book does not feel repetitive.
 
 "characters": the names (exactly as in the cast) of every character drawn in the picture, and nobody else: never list a character who is not physically in the picture, and never leave out one who is. Keep the planned characters unless the scene needs a change.
-"textPlacement": where the page text will sit over the illustration (top, bottom, left or right); the illustrator keeps that area calm and uncluttered.
+"textPlacement": where the page text will sit over the illustration (top, bottom, left or right); the illustrator keeps that area calm and uncluttered. Decide it from the picture you have just described, not by habit: the side with the least in it (open sky or ceiling: top; open ground, floor or water: bottom; everyone gathered on one side: the other side), never over a face or the page's focus. A book whose text sits in the same place on every page is fine only if every picture truly leaves that place empty.
 
 If revision instructions are given, apply them to the requested pages while keeping everything else consistent.`;
 
@@ -174,8 +201,28 @@ const BRIEF_SCHEMA = { type: 'object', additionalProperties: false, required: BR
 const DETAILS_INSTRUCTIONS = `You are a children's picture-book editor. You are given a book plan in which some planning notes are missing. Complete the plan without changing the story: do not rewrite beats, text or anything that is already filled in.
 - storyline: want, obstacle, turningPoint, resolution, change (how the main character or their world is different at the end), one short line each.
 - world: one short paragraph on where and when the story happens, the places it returns to and the recurring objects with a fixed look.
-- For every page return: arc (${ARC_IDS.join(', ')}; stages run in that order and never go backwards), purpose (one sentence on what the page does for the story), characters (names exactly as in the cast who are visible on the page), setting (specific place plus time of day or weather; same wording for pages in the same place), emotion (the main character's feeling and the page's mood, a few words), continuity (what carries over from earlier pages and must be visible here; empty string when nothing does), state (where things stand at the END of the page, read off the story as it is written: where each cast member is and who cannot be seen from outside, who is holding or carrying what, what is blocked, open, stuck or moved, and the light; two to four short sentences; a fact carries forward unchanged until a page changes it).
+- For every page return: arc (${ARC_IDS.join(', ')}; stages run in that order and never go backwards), purpose (one sentence on what the page does for the story), characters (names exactly as in the cast who are visible on the page), setting (specific place plus time of day or weather; same wording for pages in the same place), emotion (the main character's feeling and the page's mood, a few words), continuity (what carries over from earlier pages and must be visible here; empty string when nothing does), state (where things stand at the END of the page, read off the story as it is written: where each cast member is and who cannot be seen from outside, who is holding or carrying what, what is blocked, open, stuck or moved, and the light; two to four short sentences; a fact carries forward unchanged until a page changes it), shot (${SHOT_IDS.join(', ')}: how close the picture is; no three pages in a row the same), focus (the one thing the eye should land on first, a few words), turn (the page-turn hook where the page has one: what the reader is left waiting for, which the next page answers; empty string otherwise and always for the last page).
 Return every page, in order. English only.`;
+
+// The read-aloud editor: a second pass over the written text only. It never changes what happens.
+const EDIT_INSTRUCTIONS = `You are the read-aloud editor of a children's picture book. The story, the plan and the pictures are settled; you only polish the words printed on the pages. You are given the plan and the text of every page with its word count. Read the whole book aloud in your head from the first page to the last, then return a new text ONLY for the pages that need one.
+
+What to listen for:
+1. Word range: every page must be inside the audience's range. A page marked OUT OF RANGE must be brought inside it, by cutting or adding as few words as possible.
+2. Breath and rhythm: every sentence can be read in one breath; long and short sentences alternate; no accidental tongue-twister; the stress falls on the word that matters.
+3. Refrain and device: when the plan gives a refrain, it appears word for word at least three times and on or just before the last page; an accidental variation is restored to the exact words. When the plan names a device, a page that drops it for no reason picks it up again.
+4. Words against the picture: each page's picture brief is given. Cut words that only say what the picture already shows; what the words add is sound, speech, feeling and what happens next.
+5. Page turns: a page with a page-turn hook ends on the hook without giving the answer away; the page after it answers at once.
+6. The ending: the last page lands how things have changed as something seen or felt, never as a stated moral.
+7. Echoes: the same word opening three sentences in a row (unless it is the pattern), a name spelled two ways, a word too hard for the audience.
+
+Rules: do not change what happens, who is present, who says what, or any fact; the pictures are drawn from the same plan. Keep the author's voice and make the smallest change that fixes the problem. Leave a page out of your answer when it already reads well; an empty list is a good answer for a book that reads well. No headings, page numbers or stage directions in the text. English only.`;
+const EDIT_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['pages'],
+  properties: { pages: { type: 'array', description: 'only the pages whose text changes', items: { type: 'object', additionalProperties: false, required: ['n', 'reason', 'text'], properties: {
+    n: { type: 'integer', description: 'page number' }, reason: { type: 'string', description: 'what was wrong, in a few plain words' }, text: { type: 'string', description: 'the whole new text of the page' },
+  } } } },
+};
 
 const pageMetaProps = {
   arc: { type: 'string', enum: ARC_IDS },
@@ -185,6 +232,9 @@ const pageMetaProps = {
   emotion: { type: 'string' },
   continuity: { type: 'string' },
   state: { type: 'string', description: 'where everyone and everything is at the END of this page (who is where and who cannot be seen, who holds what, what is blocked or open, the light); 2–4 short sentences' },
+  shot: { type: 'string', enum: SHOT_IDS },
+  focus: { type: 'string', description: 'the one thing the eye lands on first' },
+  turn: { type: 'string', description: 'the page-turn hook the next page answers, or "" when the page simply rests' },
 };
 const storylineSchema = { type: 'object', additionalProperties: false, required: STORYLINE_FIELDS.map(([k]) => k), properties: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, { type: 'string' }])) };
 const DETAILS_SCHEMA = {
@@ -204,13 +254,15 @@ const IDEAS_SCHEMA = {
 
 const outlineSchema = (pageCount) => ({
   type: 'object', additionalProperties: false,
-  required: ['title', 'logline', 'theme', 'tone', 'styleGuide', 'world', 'storyline', 'cast', 'coverIllustration', 'pages'],
+  required: ['title', 'logline', 'theme', 'tone', 'styleGuide', 'refrain', 'device', 'world', 'storyline', 'cast', 'coverIllustration', 'pages'],
   properties: {
     title: { type: 'string' },
     logline: { type: 'string', description: 'one-sentence summary of the story' },
     theme: { type: 'string', description: 'the lesson or feeling the book leaves with the reader' },
     tone: { type: 'string' },
     styleGuide: { type: 'string' },
+    refrain: { type: 'string', description: 'the exact repeated line, or ""' },
+    device: { type: 'string', description: 'the one other read-aloud device kept up through the book, or ""' },
     world: { type: 'string' },
     storyline: storylineSchema,
     cast: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'role', 'description'], properties: { name: { type: 'string' }, role: { type: 'string' }, description: { type: 'string' } } } },
@@ -247,8 +299,9 @@ export function createBooks(deps) {
   // Books written before the outline carried planning notes (and Flash Cards mirrors) get blank ones.
   function normalize(b) {
     b.storyline = { ...Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), ...(b.storyline || {}) };
-    b.world ??= ''; b.brief.setting ??= ''; b.logic ??= null;
-    for (const p of b.pages) { p.arc ??= ''; for (const [k] of PAGE_META) p[k] ??= ''; }
+    b.world ??= ''; b.brief.setting ??= ''; b.logic ??= null; b.edit ??= null; b.worldSheetId ??= null; b.anchorPageId ??= null;
+    for (const [k] of VOICE_FIELDS) b[k] ??= '';
+    for (const p of b.pages) { p.arc ??= ''; p.shot ??= ''; for (const [k] of PAGE_META) p[k] ??= ''; }
     // A Flash Cards mirror carries each card's state in `continuity`; show it as the page's state too rather than as a blank note.
     if (b.fromSeries) for (const p of b.pages) if (p.kind === 'page' && !p.state) p.state = p.continuity;
     return b;
@@ -300,9 +353,11 @@ export function createBooks(deps) {
     let size = v.size ? String(v.size) : prev.size || '2048x2048';
     validateSize(size);
     // proof: every new picture is read by the proofreader and redrawn once if it contradicts the page (on unless switched off).
-    return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage), proof: 'proof' in v ? Boolean(v.proof) : prev.proof !== false };
+    // refs: earlier pictures of the book (and its world sheet) go to the illustrator as references (on unless switched off).
+    return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage), proof: 'proof' in v ? Boolean(v.proof) : prev.proof !== false,
+      refs: 'refs' in v ? Boolean(v.refs) : prev.refs !== false };
   }
-  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', state: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], check: null, ...fields });
+  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', state: '', shot: '', focus: '', turn: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], check: null, ...fields });
 
   // ---------- LLM ----------
   // Streams the Responses API so long writing calls can report progress; onText receives the JSON text so far.
@@ -327,13 +382,13 @@ export function createBooks(deps) {
   }
 
   // Undo: snapshot the AI-written fields before every overwrite (last 10 kept, stripped from API responses).
-  const SNAPSHOT_FIELDS = ['title', 'logline', 'theme', 'styleGuide', 'storyline', 'world', 'cast', 'pages', 'stage'];
+  const SNAPSHOT_FIELDS = ['title', 'logline', 'theme', 'styleGuide', 'storyline', 'world', 'refrain', 'device', 'cast', 'pages', 'stage'];
   function snapshot(b, label) {
     b.snapshots = [...(b.snapshots || []), { at: new Date().toISOString(), label, data: structuredClone(Object.fromEntries(SNAPSHOT_FIELDS.map((k) => [k, b[k]]))) }].slice(-10);
   }
   function publicBook(b) {
     const { snapshots, ...rest } = b;
-    return { ...rest, pages: b.pages.map((p) => ({ ...p, ...promptState(b, p) })), undoLabel: snapshots?.length ? snapshots[snapshots.length - 1].label : null };
+    return { ...rest, worldSheetStale: Boolean(b.worldSheetId && b.worldSheetOf != null && b.worldSheetOf !== b.world), pages: b.pages.map((p) => ({ ...p, ...promptState(b, p) })), undoLabel: snapshots?.length ? snapshots[snapshots.length - 1].label : null };
   }
   async function handleUndo(id) {
     let label;
@@ -349,7 +404,7 @@ export function createBooks(deps) {
         if (c) { p.imageIds = [...new Set([...p.imageIds, ...c.imageIds])]; p.imageId = c.imageId || p.imageId; }
       }
       if (b.pages.length) b.brief.pageCount = b.pages.filter((p) => p.kind === 'page').length;
-      b.logic = null;      // the reader's findings were about the version just undone
+      b.logic = null; b.edit = null;      // the readers' findings were about the version just undone
       return b;
     });
     await appendLog({ type: 'book_undo', bookId: id, undone: label });
@@ -423,6 +478,8 @@ export function createBooks(deps) {
       `Illustration style: ${book.styleGuide}`,
       STORYLINE_FIELDS.some(([k]) => book.storyline[k]) && `Storyline:\n${STORYLINE_FIELDS.filter(([k]) => book.storyline[k]).map(([k, label]) => `- ${label}: ${book.storyline[k]}`).join('\n')}`,
       book.world ? `World: ${book.world}` : book.brief.setting && `Setting from the brief (the world note is still missing): ${book.brief.setting}`,
+      book.refrain && `Refrain (these exact words): ${book.refrain}`,
+      book.device && `Read-aloud device kept up through the book: ${book.device}`,
       `Cast:\n${book.cast.map((c) => `- ${c.name} (${c.role}): ${c.description}`).join('\n')}`,
       `Pages:\n${pages.map((p) => [
         `Page ${p.n}${p.arc ? ` [${arcLabel(p.arc)}]` : ''}: ${p.beat}`,
@@ -432,6 +489,8 @@ export function createBooks(deps) {
         p.emotion && `  Feeling: ${p.emotion}`,
         p.continuity && `  Carries over: ${p.continuity}`,
         p.state && `  State at the end: ${p.state}`,
+        (p.shot || p.focus) && `  Picture: ${[p.shot && `${shotLabel(p.shot).toLowerCase()} shot`, p.focus && `the eye lands first on ${p.focus}`].filter(Boolean).join('; ')}`,
+        p.turn && `  Page-turn hook (the page ends here; the next page answers): ${p.turn}`,
         p.text && `  Current text: ${p.text}`,
       ].filter(Boolean).join('\n')).join('\n')}`,
     ].filter(Boolean).join('\n\n');
@@ -440,6 +499,7 @@ export function createBooks(deps) {
   function cleanMeta(out, castNames) {
     return {
       arc: ARC_IDS.includes(out.arc) ? out.arc : '',
+      shot: SHOT_IDS.includes(out.shot) ? out.shot : '',
       ...Object.fromEntries(PAGE_META.map(([k, max]) => [k, clampStr(out[k], max)])),
       characters: [...new Set((out.characters || []).map((n) => castNames.get(String(n).toLowerCase())).filter(Boolean))],
     };
@@ -489,6 +549,7 @@ export function createBooks(deps) {
       b.title = clampStr(parsed.title, 200); b.logline = clampStr(parsed.logline, 1000); b.theme = clampStr(parsed.theme, 1000);
       b.styleGuide = clampStr(parsed.styleGuide, 2000);
       b.world = clampStr(parsed.world, 2000);
+      for (const [k, max] of VOICE_FIELDS) b[k] = clampStr(parsed[k], max);
       b.storyline = Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, clampStr(parsed.storyline?.[k], 600)]));
       // The outline settles any detail the brief left blank, so the brief always ends up complete.
       if (!b.brief.tone) b.brief.tone = clampStr(parsed.tone, 300);
@@ -503,7 +564,9 @@ export function createBooks(deps) {
       while (planned.length < b.brief.pageCount) planned.push({});
       b.pages = [newPage('cover', 0, { illustration: clampStr(parsed.coverIllustration, 2000), textPlacement: 'top', characters: b.cast.slice(0, 3).map((c) => c.name) }), ...planned.map((fields, i) => newPage('page', i + 1, fields))];
       b.stage = 'outlined';
-      b.logic = logic;
+      b.logic = logic; b.edit = null;
+      // The last page has nothing after it to answer a hook.
+      const last = b.pages[b.pages.length - 1]; if (last?.kind === 'page') last.turn = '';
       return b;
     });
     await appendLog({ type: 'book_outline', bookId: id, title: updated.title, pages: updated.brief.pageCount, model: BOOK_MODEL, usage, durationMs,
@@ -571,7 +634,7 @@ export function createBooks(deps) {
         const p = b.pages.find((x) => x.kind === 'page' && x.n === out.n);
         if (!p) continue;
         const meta = cleanMeta(out, names);
-        for (const k of ['arc', ...PAGE_META.map(([key]) => key)]) if (!p[k] && meta[k]) { p[k] = meta[k]; filled++; }
+        for (const k of ['arc', 'shot', ...PAGE_META.map(([key]) => key)]) if (!p[k] && meta[k]) { p[k] = meta[k]; filled++; }
         if (!p.characters.length && meta.characters.length) { p.characters = meta.characters; filled++; }
       }
       return b;
@@ -594,6 +657,19 @@ export function createBooks(deps) {
       progress({ phase: total === 1 ? `Rewriting page ${wanted[0].n}` : `Writing page ${wanted[k - 1].n} (${k} of ${total})`, done: Math.max(0, countKey(t, 'textPlacement')), total, snippet: lastString(t, 'text') });
     });
     const castNames = castNameMap(book.cast);
+    // Read-aloud editor: after the whole book is written it is read once more for rhythm, the refrain, the page turns and
+    // the word range; after a partial write it only looks at pages that came back outside the range. It changes words,
+    // never the story, and a failed pass never loses the text already written.
+    const range = audienceOf(book).words;
+    const ns = new Set(wanted.map((w) => w.n));
+    const texts = new Map((parsed.pages || []).filter((o) => ns.has(o.n)).map((o) => [o.n, clampStr(o.text, 4000)]));
+    const off = [...texts].filter(([, t]) => offRange(countWords(t), range)).map(([n]) => n);
+    const whole = wanted.length === pages.length;
+    let edits = null;
+    if (!book.fromSeries && (whole || off.length)) {
+      const draft = { ...book, pages: book.pages.map((p) => (texts.has(p.n) && p.kind === 'page' ? { ...p, text: texts.get(p.n), illustration: clampStr((parsed.pages || []).find((o) => o.n === p.n)?.illustration, 2000) } : p)) };
+      edits = await editPass(id, draft, whole ? null : off, (t) => progress({ phase: whole ? `Read-aloud editor: listening to the whole book (${countKey(t, 'reason')} page${countKey(t, 'reason') === 1 ? '' : 's'} polished)` : `Bringing page${off.length === 1 ? '' : 's'} ${off.join(', ')} into the word range`, snippet: lastString(t, 'text') })).catch(() => null);
+    }
     let written = 0;
     const updated = await withBook(id, (b) => {
       snapshot(b, total === 1 ? `Rewrote page ${wanted[0].n}` : wanted.some((w) => w.text) ? 'Rewrote all pages' : 'Wrote page scripts');
@@ -603,15 +679,74 @@ export function createBooks(deps) {
         p.text = clampStr(out.text, 4000); p.illustration = clampStr(out.illustration, 2000);
         p.characters = [...new Set((out.characters || []).map((n) => castNames.get(String(n).toLowerCase())).filter(Boolean))];
         p.textPlacement = PLACEMENTS.includes(out.textPlacement) ? out.textPlacement : 'bottom';
+        const e = edits?.find((x) => x.n === p.n);
+        if (e) p.text = e.text;
         written++;
       }
+      // What the editor changed is kept for the author; notes about pages just rewritten without it are dropped.
+      if (edits) b.edit = { at: new Date().toISOString(), changed: [...(whole ? [] : (b.edit?.changed || []).filter((c) => !ns.has(c.n))), ...edits.map(({ n, reason }) => ({ n, reason }))].sort((x, y) => x.n - y.n) };
+      else if (b.edit) b.edit.changed = b.edit.changed.filter((c) => !ns.has(c.n));
       if (b.pages.filter((p) => p.kind === 'page').every((p) => p.text)) b.stage = 'scripted';
       // A finding whose pages were all just rewritten to an instruction is taken as dealt with; 🔎 reads the story again.
       if (extra && b.logic?.holes.length) { const done = new Set(wanted.map((w) => w.n)); b.logic.holes = b.logic.holes.filter((h) => !h.pages.length || !h.pages.every((n) => done.has(n))); }
       return b;
     });
-    await appendLog({ type: 'book_scripts', bookId: id, pages: wanted.map((p) => p.n), written, instructions: extra || null, model: BOOK_MODEL, usage, durationMs });
+    await appendLog({ type: 'book_scripts', bookId: id, pages: wanted.map((p) => p.n), written, instructions: extra || null, model: BOOK_MODEL, usage, durationMs,
+      edited: edits ? edits.map((e) => `page ${e.n}: ${e.reason}`) : null, outOfRange: off });
     return updated;
+  }
+
+  // ---------- read-aloud editor ----------
+  // The book as the editor hears it: every page's text with its word count, the hook it should end on and its picture brief.
+  function editDigest(book, only) {
+    const a = audienceOf(book);
+    const pages = book.pages.filter((p) => p.kind === 'page');
+    return [
+      `Title: ${book.title}`, `Audience: ages ${a.id} (${a.label}). ${a.guidance}. Word range per page: ${a.words[0]}–${a.words[1]}.`,
+      book.brief.tone && `Tone: ${book.brief.tone}`,
+      book.refrain ? `Refrain (these exact words): ${book.refrain}` : 'Refrain: none planned.',
+      book.device ? `Read-aloud device: ${book.device}` : 'Read-aloud device: none planned.',
+      book.storyline.change && `What has changed by the end: ${book.storyline.change}`,
+      `PAGES, in reading order:\n${pages.map((p) => {
+        const n = countWords(p.text);
+        return [
+          `Page ${p.n}${p.arc ? ` [${arcLabel(p.arc)}]` : ''}: ${p.beat}`,
+          p.turn && `  Page-turn hook: ${p.turn}`,
+          p.illustration && `  Picture brief: ${p.illustration}`,
+          `  Text (${n} word${n === 1 ? '' : 's'}${offRange(n, a.words) ? `, OUT OF RANGE: must be ${a.words[0]}–${a.words[1]}` : ''}): ${p.text || '—'}`,
+        ].filter(Boolean).join('\n');
+      }).join('\n')}`,
+      only ? `Revise ONLY page${only.length === 1 ? '' : 's'} ${only.join(', ')}; the other pages are given so you can hear them in context.` : '',
+    ].filter(Boolean).join('\n\n');
+  }
+  // Returns the accepted changes [{ n, reason, text }]. A change is kept only for a written page, only when the words
+  // really differ, and never when it moves the page further outside the word range than it was.
+  async function editPass(id, book, only, onText) {
+    const range = audienceOf(book).words;
+    const { parsed } = await llmJson('book_edit', EDIT_INSTRUCTIONS, editDigest(book, only), EDIT_SCHEMA, { type: 'book_edit', bookId: id }, onText);
+    const seen = new Set();
+    return (parsed.pages || []).map((o) => ({ n: o.n, reason: clampStr(o.reason, 300), text: clampStr(o.text, 4000) })).filter((o) => {
+      const p = book.pages.find((x) => x.kind === 'page' && x.n === o.n);
+      if (!p || !p.text || !o.text || o.text === p.text || seen.has(o.n) || (only && !only.includes(o.n))) return false;
+      seen.add(o.n);
+      return offRange(countWords(o.text), range) <= offRange(countWords(p.text), range);
+    });
+  }
+  async function handleEdit(id, progress = () => {}) {
+    const book = await getBook(id);
+    if (book.fromSeries) throw new HttpError(400, 'This book is a copy of a Flash Cards story. Edit the story in Flash Cards.');
+    if (!book.pages.some((p) => p.kind === 'page' && p.text)) throw new HttpError(400, 'Write the page text first.');
+    const edits = await editPass(id, book, null, (t) => progress({ phase: `Read-aloud editor: listening to the whole book (${countKey(t, 'reason')} page${countKey(t, 'reason') === 1 ? '' : 's'} polished)`, snippet: lastString(t, 'text') }));
+    const edit = { at: new Date().toISOString(), changed: edits.map(({ n, reason }) => ({ n, reason })).sort((x, y) => x.n - y.n) };
+    const updated = await withBook(id, (b) => {
+      if (edits.length) snapshot(b, 'Read-aloud edit');
+      // A page the author changed while the editor was reading keeps the author's words.
+      for (const e of edits) { const p = b.pages.find((x) => x.kind === 'page' && x.n === e.n); const was = book.pages.find((x) => x.kind === 'page' && x.n === e.n); if (p && was && p.text === was.text) p.text = e.text; }
+      b.edit = edit;
+      return b;
+    });
+    await appendLog({ type: 'book_edit', bookId: id, edited: edits.map((e) => `page ${e.n}: ${e.reason}`) });
+    return { book: updated, edit };
   }
 
   // ---------- illustrations ----------
@@ -637,18 +772,21 @@ export function createBooks(deps) {
       '', `Scene: ${page.illustration || page.beat}`,
     ];
     // Planning notes from the outline: the image model sees one page at a time, so each prompt carries its own context.
+    // Each fact is said once: a written brief already names the place, and with story facts the carry-over is in them.
+    const facts = storyFacts(book, page), who = inPicture(book, page);
+    const brief = page.illustration, place = placeKey(page.setting);
     const notes = [
-      page.setting && `Setting: ${page.setting}`,
+      page.setting && !(brief && place && plain(brief).includes(place)) && `Setting: ${page.setting}`,
       page.emotion && `Mood: ${page.emotion}`,
-      page.continuity && `Carried over from earlier pages (must be visible and match): ${page.continuity}`,
+      !brief && (page.shot || page.focus) && `Framing: ${[page.shot && `${shotLabel(page.shot).toLowerCase()} shot`, page.focus && `the eye lands first on ${page.focus}`].filter(Boolean).join('; ')}`,
+      page.continuity && !(brief && facts.length) && `Carried over from earlier pages (must be visible and match): ${page.continuity}`,
       (book.world || book.brief.setting) && `Story world (the same on every page): ${book.world || book.brief.setting}`,
     ].filter(Boolean);
     if (notes.length) lines.push('', ...notes);
-    const facts = storyFacts(book, page), who = inPicture(book, page);
     if (facts.length) lines.push('', 'Story facts — where everyone and everything is. The picture must agree with them; they are for drawing from, never for lettering:', ...facts.map((x) => `- ${x}`));
     if (who) lines.push('', `In this picture: ${who.shown.join(', ')}.${who.absent.length ? ` NOT in this picture: ${who.absent.join(', ')}.` : ''}`);
     if (unlinked.length) lines.push('', `Characters (draw them exactly like this on every page):\n${unlinked.map((c) => `- ${c.name}: ${c.description}`).join('\n')}`);
-    lines.push('', `Style (identical on every page of the book): ${book.styleGuide || book.brief.style || 'warm, friendly picture-book illustration'}`);
+    lines.push('', `Style (identical on every page of the book): ${visualStyle(book.styleGuide) || book.brief.style || 'warm, friendly picture-book illustration'}`);
     const area = { top: 'top quarter', bottom: 'bottom quarter', left: 'left third', right: 'right third' }[page.textPlacement] || 'bottom quarter';
     if (isCover) lines.push('', `Text: the title "${book.title}" in large, playful, highly legible lettering across the top. No other text.`);
     else if (book.image.textInImage && page.text) lines.push('', `Text: print exactly this text in the ${area}, in a clean, rounded, highly legible children's-book font on a calm area of the picture: "${page.text.replace(/"/g, "'")}". No other text.`);
@@ -742,6 +880,67 @@ export function createBooks(deps) {
     const chosen = book.pages.find((p) => p.id === pageId)?.imageId;
     return { book, record: records.find((r) => r.id === chosen) || records[records.length - 1], records, check };
   }
+  // ---------- reference pictures ----------
+  // Words alone let places and props drift from page to page, so a picture is drawn with pictures beside it: the world
+  // sheet (places and recurring objects), and one earlier page of the book, the nearest one set in the same place whose
+  // picture passed proofreading, failing that the nearest good page as a style reference. (One page, not several, and
+  // the nearest rather than always the first: a reference's cast and props tend to leak into the new picture.) A page
+  // the author pinned as the style anchor is added as well.
+  const goodPicture = (p) => !(p.check && p.check.imageId === p.imageId && !p.check.pass);
+  function refPlan(book, page) {
+    if (book.image.refs === false) return [];
+    const out = [];
+    if (book.worldSheetId) out.push({ recId: book.worldSheetId, label: 'world sheet', text: 'the world sheet of this book: its places and recurring objects, without characters. Wherever one of them appears in this picture, match its shape, colours and size. Do not copy the layout of the sheet, and do not show anything from it that the scene above does not call for.' });
+    const others = book.pages.filter((p) => p.id !== page.id && p.imageId);
+    const label = (p) => (p.kind === 'cover' ? 'the cover' : `page ${p.n}`);
+    const nearest = (list) => [...list].sort((a, b) => Math.abs(a.n - page.n) - Math.abs(b.n - page.n) || a.n - b.n)[0];
+    const story = others.filter((p) => p.kind === 'page');
+    const key = page.kind === 'page' ? placeKey(page.setting) : '';
+    const samePlace = key ? nearest(story.filter((p) => goodPicture(p) && placeKey(p.setting) === key)) : null;
+    const pinned = others.find((p) => p.id === book.anchorPageId);
+    const noLeak = 'Who is in this picture, where they are and what they do comes only from the scene described above: never carry over a character, an object, a pose, the framing or any lettering because the reference shows it.';
+    if (samePlace) out.push({ recId: samePlace.imageId, label: `same place: ${label(samePlace)}`, text: `${label(samePlace)} of this same book, set in the same place. Match its rendering style, and keep the place as it is drawn there: its landmarks, objects, colours and light. ${noLeak}` });
+    if (pinned && pinned !== samePlace) out.push({ recId: pinned.imageId, label: `style anchor: ${label(pinned)}`, text: `${label(pinned)} of this same book, as a style reference only. Match its rendering, line, palette and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
+    if (!samePlace && !pinned) {
+      const near = nearest(story.filter(goodPicture)) || nearest(others.filter(goodPicture));
+      if (near) out.push({ recId: near.imageId, label: `style: ${label(near)}`, text: `${label(near)} of this same book, as a style reference only. Match its rendering, line and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
+    }
+    return out;
+  }
+  // The planned references as images, dropping any that are gone from disk, too large to send, or over the room left
+  // once the character references are counted.
+  async function loadRefs(plan, room) {
+    const refs = [];
+    for (const r of plan) {
+      if (refs.length >= room) break;
+      const file = deps.recordFile && await deps.recordFile(r.recId);
+      const buf = file && await fsp.readFile(file).catch(() => null);
+      if (buf && buf.length <= 15 * 1024 * 1024) refs.push({ dataUrl: `data:image/${path.extname(file).slice(1).toLowerCase().replace('jpg', 'jpeg') || 'png'};base64,${buf.toString('base64')}`, label: r.label, text: r.text });
+    }
+    return refs;
+  }
+
+  // One picture of the book's places and recurring objects, drawn from the world note, shown to the illustrator with every page.
+  async function handleWorldSheet(id) {
+    const book = await getBook(id);
+    if (!book.world) throw new HttpError(400, 'Write the world note first: the sheet is drawn from it.');
+    const prompt = `World sheet for the children's picture book "${book.title}": a model sheet of its places and recurring objects, which the illustrator will match on every page.
+
+World: ${book.world}
+
+Layout: one clean sheet on a plain off-white background. In the upper half, each place the story returns to as its own small scene, empty of characters. In the lower half, each recurring object drawn once, on its own, large enough to read its shape, in its fixed colours and at its true size relative to the others.
+Style: ${visualStyle(book.styleGuide) || book.brief.style || 'warm, friendly picture-book illustration'}
+
+Constraints:
+- No characters, people or animals anywhere on the sheet.
+- No text, labels, numbers, arrows or watermarks.`;
+    const r = await handleGenerate({ prompt, originalPrompt: `${book.title} — world sheet`, model: book.image.model, quality: 'high', size: '1024x1024', format: 'png', n: 1, tags: ['book', slugify(book.title || 'book'), 'world-sheet'] }, { ai: { feature: 'book_world_sheet', refs: { bookId: id } } });
+    const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — world sheet` });
+    const updated = await withBook(id, (b) => { b.worldSheetId = rec.id; b.worldSheetOf = b.world; return b; });
+    await appendLog({ type: 'book_world_sheet', bookId: id, recordId: rec.id, costUsd: rec.costUsd });
+    return { book: updated, record: rec };
+  }
+
   async function drawPage(id, pageId, fixNotes = '') {
     const book = await getBook(id);
     const page = book.pages.find((p) => p.id === pageId);
@@ -749,19 +948,20 @@ export function createBooks(deps) {
     if (!page.illustration && !page.beat) throw new HttpError(400, 'This page needs an illustration brief first.');
     const all = await readCharacters();
     const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
+    const refs = await loadRefs(refPlan(book, page), (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => n + (all.find((x) => x.id === cid)?.refs.length || 0), 0));
     const prompt = withFix(page.imagePrompt || pagePrompt(book, page), fixNotes);      // the prompt reviewed in the Picture prompts step, if there is one
     const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${book.title} — ${label}: ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, n: 1, format: 'png',
       characterIds, tags: ['book', slugify(book.title || 'book'), page.kind === 'cover' ? 'cover' : `page-${page.n}`],
-    }, { ai: { feature: 'book_page_image', refs: { bookId: id } } });
+    }, { ai: { feature: 'book_page_image', refs: { bookId: id } }, refs });
     const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — ${label}` });
     const updated = await withBook(id, (b) => {
       const p = b.pages.find((x) => x.id === pageId);
       if (p) { p.imageIds = [...(p.imageIds || []), rec.id]; p.imageId = rec.id; p.check = null; }
       return b;
     });
-    await appendLog({ type: 'book_page_image', bookId: id, page: label, recordId: rec.id, characterIds, fix: Boolean(fixNotes), costUsd: rec.costUsd });
+    await appendLog({ type: 'book_page_image', bookId: id, page: label, recordId: rec.id, characterIds, references: refs.map((x) => x.label), fix: Boolean(fixNotes), costUsd: rec.costUsd });
     return { book: updated, record: rec };
   }
 
@@ -807,7 +1007,7 @@ Constraints:
     await fsp.mkdir(BOOKS_DIR, { recursive: true });
     const now = new Date().toISOString();
     const book = { id: crypto.randomUUID(), createdAt: now, updatedAt: now, stage: 'brief', brief: cleanBrief(body.brief),
-      title: '', logline: '', theme: '', styleGuide: '', world: '', storyline: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), cast: [], pages: [], logic: null, image: cleanImage(body.image) };
+      title: '', logline: '', theme: '', styleGuide: '', world: '', refrain: '', device: '', storyline: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), cast: [], pages: [], logic: null, edit: null, worldSheetId: null, anchorPageId: null, image: cleanImage(body.image) };
     await writeJsonAtomic(bookFile(book.id), book);
     await appendLog({ type: 'book_created', bookId: book.id, premise: book.brief.premise });
     return book;
@@ -818,7 +1018,10 @@ Constraints:
     return withBook(id, (b) => {
       if (body.brief) b.brief = cleanBrief(body.brief, b.brief);
       if (body.image) b.image = cleanImage(body.image, b.image);
-      for (const [k, max] of [['title', 200], ['logline', 1000], ['theme', 1000], ['styleGuide', 2000], ['world', 2000]]) if (k in body) b[k] = clampStr(body[k], max);
+      for (const [k, max] of [['title', 200], ['logline', 1000], ['theme', 1000], ['styleGuide', 2000], ['world', 2000], ...VOICE_FIELDS]) if (k in body) b[k] = clampStr(body[k], max);
+      // The style anchor is a page of this book that has a picture; anything else (or null) goes back to automatic.
+      if ('anchorPageId' in body) b.anchorPageId = b.pages.some((p) => p.id === body.anchorPageId && p.imageId) ? body.anchorPageId : null;
+      if ('worldSheetId' in body && !body.worldSheetId) { b.worldSheetId = null; delete b.worldSheetOf; }
       if (body.storyline && typeof body.storyline === 'object') for (const [k] of STORYLINE_FIELDS) if (k in body.storyline) b.storyline[k] = clampStr(body.storyline[k], 600);
       if (Array.isArray(body.cast)) {
         b.cast = body.cast.slice(0, 12).map((c) => ({ id: clampStr(c.id, 64) || crypto.randomUUID(), name: clampStr(c.name, 80), role: clampStr(c.role, 200), description: clampStr(c.description, 1000),
@@ -830,6 +1033,7 @@ Constraints:
           if (!p) continue;
           for (const [k, max] of [['beat', 1000], ['text', 4000], ['illustration', 2000], ...PAGE_META]) if (k in patch) p[k] = clampStr(patch[k], max);
           if ('arc' in patch) p.arc = ARC_IDS.includes(patch.arc) ? patch.arc : '';
+          if ('shot' in patch) p.shot = SHOT_IDS.includes(patch.shot) ? patch.shot : '';
           if ('imagePrompt' in patch) { p.imagePrompt = clampStr(patch.imagePrompt, 8000); if (!p.imagePrompt) p.promptAuto = ''; }
           if (Array.isArray(patch.characters)) p.characters = patch.characters.map((n) => clampStr(n, 80)).filter((n) => b.cast.some((c) => c.name === n));
           if (PLACEMENTS.includes(patch.textPlacement)) p.textPlacement = patch.textPlacement;
@@ -904,10 +1108,11 @@ Constraints:
     const spine = STORYLINE_FIELDS.filter(([k]) => b.storyline[k]);
     if (spine.length) out.push('## Storyline', '', ...spine.map(([k, label]) => `- **${label}:** ${b.storyline[k]}`), '');
     if (b.world) out.push('## World', '', b.world, '');
+    if (b.refrain || b.device) out.push('## Read-aloud voice', '', ...[b.refrain && `- **Refrain:** ${b.refrain}`, b.device && `- **Device:** ${b.device}`].filter(Boolean), '');
     for (const p of b.pages) {
       out.push(p.kind === 'cover' ? '## Cover' : `## Page ${p.n}${p.arc ? ` · ${arcLabel(p.arc)}` : ''}`, img(p));
       if (p.text) out.push(p.text, '');
-      const meta = [p.beat && `Beat: ${p.beat}`, p.purpose && `Purpose: ${p.purpose}`, p.characters.length && `Characters: ${p.characters.join(', ')}`, p.setting && `Setting: ${p.setting}`, p.emotion && `Feeling: ${p.emotion}`, p.continuity && `Carries over: ${p.continuity}`, p.state && `State at the end: ${p.state}`].filter(Boolean);
+      const meta = [p.beat && `Beat: ${p.beat}`, p.purpose && `Purpose: ${p.purpose}`, p.characters.length && `Characters: ${p.characters.join(', ')}`, p.setting && `Setting: ${p.setting}`, p.emotion && `Feeling: ${p.emotion}`, p.continuity && `Carries over: ${p.continuity}`, p.state && `State at the end: ${p.state}`, (p.shot || p.focus) && `Picture: ${[shotLabel(p.shot), p.focus && `focus on ${p.focus}`].filter(Boolean).join(' · ')}`, p.turn && `Page turn: ${p.turn}`].filter(Boolean);
       if (p.kind === 'page' && meta.length) out.push(...meta.map((m) => `- ${m}`), '');
       out.push(`> Illustration: ${p.illustration || p.beat || '—'}`, '');
     }
@@ -943,11 +1148,13 @@ Constraints:
     else if (req.method === 'POST' && a === 'details') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleDetails(id, progress))); }
     else if (req.method === 'POST' && a === 'undo') send(res, 200, pub(await handleUndo(id)));
     else if (req.method === 'POST' && a === 'prompts') send(res, 200, pub(await handlePrompts(id, await readJson(req))));
+    else if (req.method === 'POST' && a === 'edit') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleEdit(id, progress))); }
+    else if (req.method === 'POST' && a === 'world-sheet') send(res, 200, pub(await handleWorldSheet(id)));
     else if (req.method === 'POST' && a === 'logic') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleLogic(id, progress))); }
     else if (req.method === 'POST' && a === 'pages' && c === 'image') send(res, 200, pub(await handlePageImage(id, b, await readJson(req).catch(() => ({})))));
     else if (req.method === 'POST' && a === 'pages' && c === 'check') { const check = await checkPage(id, b); send(res, 200, { check, book: publicBook(await getBook(id)) }); }
     else if (req.method === 'POST' && a === 'cast' && c === 'design') send(res, 200, pub(await handleDesignCast(id, b)));
-    else if (req.method === 'GET' && a === 'prompt' && b) { const book = await getBook(id); const page = book.pages.find((x) => x.id === b); if (!page) throw new HttpError(404, 'Page not found.'); send(res, 200, { prompt: pagePrompt(book, page) }); }
+    else if (req.method === 'GET' && a === 'prompt' && b) { const book = await getBook(id); const page = book.pages.find((x) => x.id === b); if (!page) throw new HttpError(404, 'Page not found.'); send(res, 200, { prompt: pagePrompt(book, page), references: refPlan(book, page).map((r) => r.label) }); }
     else if (req.method === 'GET' && a === 'images.zip') {
       const { zip, filename } = await exportImagesZip(id, await readHistory(), url.searchParams.get('story') === '1');
       res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length, 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' });
@@ -959,5 +1166,5 @@ Constraints:
     return true;
   }
 
-  return { route, config: () => ({ model: BOOK_MODEL, ageBands: AGE_BANDS.map(({ id, label, words }) => ({ id, label, words })), placements: PLACEMENTS, maxPages: MAX_PAGES, arcStages: ARC_STAGES, storyline: STORYLINE_FIELDS.map(([id, label]) => ({ id, label })) }) };
+  return { route, config: () => ({ model: BOOK_MODEL, ageBands: AGE_BANDS.map(({ id, label, words }) => ({ id, label, words })), placements: PLACEMENTS, maxPages: MAX_PAGES, arcStages: ARC_STAGES, shots: SHOTS, storyline: STORYLINE_FIELDS.map(([id, label]) => ({ id, label })) }) };
 }

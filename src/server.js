@@ -1058,7 +1058,7 @@ async function route(req, res) {
 const books = createBooks({
   OUTPUT_DIR, BOOK_MODEL, API_KEY, ai, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
   readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, validateSize,
-  IMAGE_MODELS, QUALITIES, handleCharacterSheet,
+  IMAGE_MODELS, QUALITIES, handleCharacterSheet, MAX_REFS,
   characterBible: (...args) => cards.characterBible(...args),
   recordFile: async (id) => { const rec = (await readHistory()).find((r) => r.id === id); return rec && !rec.deletedAt && !rec.missing ? path.join(OUTPUT_DIR, rec.file) : null; },
 });

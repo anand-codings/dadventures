@@ -35,6 +35,29 @@ illustrated.
    **🎨 Design character** turns a text-only cast member into a studio character (one 1024² design on white), so later pages
    use it as a reference. Re-illustrating keeps every version; click a thumbnail to choose.
 
+**Read-aloud craft and picture consistency.**
+- **Refrain and device** are their own fields in the Outline tab (the outline proposes them; blank means none). The writer
+  prints the refrain word for word; the editor restores accidental variations.
+- Every page plans its **shot** (wide, medium, close-up), what the **eye lands on** first and, where it has one, a
+  **page-turn hook** the next page answers. The row of letters under the story arc shows the rhythm of the shots and marks
+  a third page in a row at the same distance.
+- A **read-aloud editor** goes through the whole text after it is written (and on demand: **🎧 Read-aloud edit**,
+  `POST /api/books/:id/edit`): word range, breath and rhythm, the refrain, page turns, words that only repeat the picture.
+  It changes words, never the story; a change that moves a page further outside the word range is refused; what it changed
+  is listed above the pages and ↶ Undo restores the text. A partial rewrite calls it only for pages that came back outside
+  the range. Pages still outside the range are named next to the page count.
+- **Reference pictures** (Pictures → Consistency, on by default): each new picture is drawn with the nearest finished page
+  set in the same place beside it (pages whose picture failed proofreading are skipped), or failing that the nearest
+  finished page as a style reference. **☆ Use as style anchor** pins one page as the style for all the others.
+  **🎨 Draw the world sheet** (Outline tab, `POST /api/books/:id/world-sheet`, one paid 1024² picture) draws the places and
+  recurring objects of the world note without characters; it is then sent with every page. References are dropped, never
+  the picture, when there is no room left after the character references.
+- **Each fact once in the prompt**: when the picture brief already names the place the Setting line is left out, and the
+  carry-over line is left out when the page has story facts. Briefs no longer repeat the art style or the look of recurring
+  objects, and sentences about word counts or reading aloud are filtered out of the style line. Prompts stored before this
+  change show as out of date until rewritten.
+- The writer chooses **where the text sits** from the composition (the emptiest side) instead of defaulting to the bottom.
+
 **Story consistency** (ported from Flash Cards). Every page also carries a **state**: where everyone and everything is at
 the end of the page (who is where and who cannot be seen, who holds what, what is blocked or open, the light), carried forward
 until a page changes it. The outline is written to five story-logic rules (the obvious way out is visibly closed, abilities
