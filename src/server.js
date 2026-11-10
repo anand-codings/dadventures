@@ -1060,6 +1060,7 @@ const books = createBooks({
   readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, validateSize,
   IMAGE_MODELS, QUALITIES, handleCharacterSheet,
   characterBible: (...args) => cards.characterBible(...args),
+  recordFile: async (id) => { const rec = (await readHistory()).find((r) => r.id === id); return rec && !rec.deletedAt && !rec.missing ? path.join(OUTPUT_DIR, rec.file) : null; },
 });
 
 const sheets = createSheets({ ROOT, OUTPUT_DIR, THUMBS_DIR, HttpError, send, readJson, slugify, clampStr, appendLog, readJsonFile, writeJsonAtomic });

@@ -119,6 +119,7 @@
               <label class="field"><span>Page size</span><select id="img-size"></select></label>
             </div>
             <label class="field check"><span>Text</span><label><input type="checkbox" id="text-in-image"> Draw the text into the picture</label></label>
+            <label class="field check"><span>Proofread</span><label title="A second reader checks every new picture against its page (who is in it, where the story says everyone is, stray lettering) and redraws it once if it is wrong. A redraw is a second paid picture."><input type="checkbox" id="proof" checked> Check each picture and redraw once if it is wrong</label></label>
           </div>
         </div>
 
@@ -143,6 +144,10 @@
               <div class="arc-bar" id="arc-bar"></div>
               <div class="section-title">Page by page <span class="hint" id="outline-meta"></span><span class="spacer"></span><button class="btn secondary small" id="fill-details" type="button" hidden title="Fill in the blank planning notes without changing the story">✨ Fill in the blank details</button></div>
               <div class="outline" id="outline"></div>
+              <div id="logic-box">
+                <div class="section-title">Continuity reader <span class="hint">a second reader asking “but why?”: plot holes, characters in the wrong place, things that change by themselves</span><span class="spacer"></span><button class="btn secondary small" id="check-logic" type="button" title="Reads the plan (and the page text and picture briefs, once written) and lists what does not add up, with the smallest fix for each">🔎 Check the story adds up</button></div>
+                <div class="logic" id="logic"></div>
+              </div>
               <div class="section-title">Change the whole story</div>
               <div class="revise-row">
                 <input id="outline-instructions" type="text" placeholder="“make the middle funnier”, “add a page where they count the fish”…">

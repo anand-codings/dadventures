@@ -383,6 +383,14 @@ body.cards .art-empty { aspect-ratio: 2 / 3; }
 .card-slot .s-fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .card-slot textarea { min-height: 40px; }
 .card-slot .s-visual { font-size: 12px; color: var(--text-2); }
+.card-slot textarea.s-visual { min-height: 54px; resize: vertical; }
+.card-slot .s-shows { font-size: 12px; color: var(--text-2); }
+.card-state { font-size: 12px; width: 100%; }
+.logic { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.logic .hole { border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: 6px 8px; background: var(--panel); }
+.logic .hole.breaks { border-left-color: #e5484d; } .logic .hole.confusing { border-left-color: #f5a524; }
+.logic .hole .fix { color: var(--muted); margin-top: 3px; }
+.logic .hole .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
 .examples { max-height: 164px; overflow: auto; }
 body.cards .controls, .examples { scrollbar-color: #3a4152 transparent; scrollbar-width: thin; }
 .card-titles textarea { min-height: 38px; }
