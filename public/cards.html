@@ -61,6 +61,7 @@
           <div class="radio-row">
             <label><input type="radio" name="kind" value="story"> Story <span class="hint">— read in order, like a comic or little book</span></label>
           </div>
+          <label class="field" id="based-on-field"><span>Continue an earlier story <span class="hint">(same cast, look, world and painted places)</span></span><select id="based-on"><option value="">No — a new world</option></select></label>
           <label class="field"><span>Card template <span class="hint">(layout and content slots)</span></span><select id="template"></select></label>
           <label class="field"><span>Look <span class="hint">(borrow the art style of another template)</span></span><select id="style-template"></select></label>
           <label class="field"><span id="premise-label">What is the series about?</span><textarea id="premise" rows="3" placeholder="Animals that live in tide pools. Or: Pip the puffin flies south and learns how birds find their way."></textarea></label>
@@ -111,8 +112,13 @@
           <button class="btn primary" id="next" type="button">Plan the series</button>
           <button class="btn secondary small" id="draft-all" type="button" hidden title="Quick low-quality pictures of every card, to check the story reads before paying for the real ones">✏️ Draft storyboard</button>
           <button class="btn danger small" id="stop" type="button" hidden>Stop after this card</button>
+          <button class="btn secondary small" id="redraw-stale" type="button" hidden title="Cards whose words or picture description were edited after their picture was drawn">↻ Redraw changed cards</button>
           <button class="btn secondary small" id="upscale" type="button" hidden>⬆ Upscale ×4 for print</button>
           <span class="spacer"></span>
+          <nav class="subtabs" id="view-toggle" hidden>
+            <button type="button" data-view="cards">Cards</button>
+            <button type="button" data-view="board">Storyboard</button>
+          </nav>
           <span class="save-state" id="save-state"></span>
         </div>
         <div class="progress" id="progress" hidden>
@@ -136,6 +142,13 @@
           Pick a template on the left, say what the series is about, then <b>Plan the series</b>.<br>
           A <b>Set</b> is a collection (eight tide-pool animals). A <b>Story</b> is read in order, each card continuing the last.
         </div>
+        <div id="board" hidden>
+          <div class="board-head">
+            <div><b>Storyboard</b> <span class="hint">Read the story through the pictures before paying for the final ones. Drag a card to move it, ✕ to cut it, or type a change and rewrite it.</span></div>
+          </div>
+          <div class="board-grid" id="board-grid"></div>
+          <div class="board-foot" id="board-foot"></div>
+        </div>
         <div id="series" hidden>
           <div class="book-head"><input id="title" class="book-title" type="text" placeholder="Series title"></div>
           <label class="field"><span>About</span><textarea id="logline" rows="2"></textarea></label>
@@ -150,12 +163,24 @@
               <label class="field"><span>Refrain <span class="hint">chanted on every card</span></span><input id="refrain" type="text"></label>
               <label class="field"><span>Hidden friend <span class="hint">to spot in every picture</span></span><input id="hidden-friend" type="text"></label>
             </div>
+            <div class="section-title">Narration <span class="hint">one spoken track per card, to play alongside the cards or load onto a Yoto Make Your Own card</span></div>
+            <div class="narration-bar">
+              <label class="hint">Voice <select id="voice"></select></label>
+              <button class="btn secondary small" id="narrate" type="button">🔊 Record the narration</button>
+              <a class="btn secondary small" id="audio-zip" download hidden>⬇ Audio tracks (.zip)</a>
+              <span class="hint" id="audio-state"></span>
+            </div>
+            <audio id="intro-audio" controls preload="none" hidden></audio>
+            <div class="section-title">Whole-book check <span class="hint">all finished pictures looked at together: characters, objects and places that drift between cards</span></div>
+            <div class="continuity" id="continuity"></div>
+            <div class="actions"><button class="btn secondary small" id="check-book" type="button">🔎 Check the whole book</button></div>
             <div class="section-title">Cover, chapter cards and places</div>
             <div class="extras" id="extras"></div>
             <div class="actions">
               <button class="btn secondary small" id="make-places" type="button" title="One reference painting per place, sent with every card set there so the world stays the same">🏞 Place references</button>
               <button class="btn secondary small" id="make-extras" type="button" title="A front cover and one title card per chapter">🎨 Cover &amp; chapter cards</button>
               <button class="btn secondary small" id="tidy" type="button" title="Shorten long captions and use one name for each character and thing">✂️ Tidy the text</button>
+              <button class="btn secondary small" id="make-backs" type="button" title="A typeset reverse side for every card: number, chapter, the read-aloud text, the play prompt and the note for grown-ups. Free; used automatically when you send the series to Print Sheets (double-sided)">🂠 Card backs</button>
               <a class="btn secondary small" id="script" download>⬇ Read-aloud script</a>
             </div>
           </div>

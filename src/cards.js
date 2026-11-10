@@ -5,6 +5,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { zipStore } from './books.js';
 
 export const ARCHETYPES = [
   { id: 'profile', label: 'Profile (one subject, fact panels around a hero picture)' },
@@ -29,6 +30,16 @@ export const CARD_AUDIENCES = [
   { id: '5-8', label: '5–8 · early reader', panelWords: 22, guidance: 'one or two clear sentences per panel, one new vocabulary word explained in context' },
   { id: '8-12', label: '8–12 · curious kid', panelWords: 32, guidance: 'precise facts, numbers with units, cause and effect' },
 ];
+// Stories for one- to three-year-olds are a different form, not a shorter version of the older one.
+const TODDLER_RULES = `TODDLER STORY (ages 1–3) — these rules override anything else that conflicts with them:
+- Plot: ONE small everyday problem a two-year-old knows from their own life (a lost toy, something too high, not wanting to share, the dark, bath time, bedtime, a tower that falls), solved in one clear step after exactly one failed try. No sub-plots and no chapters (leave every "chapter" empty, however many cards there are). Two or three characters in the whole story.
+- Pictures: only the "splash" and "duo" layouts — one or two big pictures per card, big faces, one action per picture.
+- Captions: at most 6 words each, simple present tense, names rather than "he" or "she", everyday words a toddler hears. Speech bubbles are 1–3 words or a sound (Uh-oh! Splash! Mine! Night-night.).
+- Repetition: one short sentence frame returns on every card with a word changed ("Fish looks under the rock. No shell!"), so the child can join in. The refrain is 3–5 words a toddler can shout.
+- Narration: sentences of at most 8 words, with sound words, and now and then a question to the child ("Where is the shell?").
+- The play prompt on every card is something a toddler can DO: point at something, make a sound, wave, clap, or count no higher than three. Never "what do you think" or "why".
+- Feelings are named plainly: happy, sad, cross, scared, sleepy, proud.
+- The line for grown-ups is a tip for sharing this card with a toddler ("Pause and let your child say 'uh-oh'"), not a science fact.`;
 const MAX_CARDS = 40;
 const MAX_SLOTS = 16;
 const WRITE_CHUNK = 5;
@@ -520,6 +531,8 @@ export function createCards(deps) {
       if (!s) throw new HttpError(404, 'Series not found.');
       const result = await fn(s);
       await markStale(s).catch(() => {});
+      if (s.audio) s.audio.stale = audioState(s).stale;
+      if (s.backs) s.backsStale = backsStale(s);
       s.updatedAt = new Date().toISOString();
       await writeJsonAtomic(seriesFile(id), s);
       await mirrorBook(s).catch((e) => console.error('book mirror failed', e));
@@ -543,7 +556,9 @@ export function createCards(deps) {
       const was = c.prints[c.imageId];
       // A picture made before this was tracked: assume it shows the text as it stands now.
       if (!was) { c.prints[c.imageId] = now; c.stale = null; continue; }
-      const words = now.text.filter((x) => !was.text.includes(x)), gone = was.text.filter((x) => !now.text.includes(x));
+      // A sketch is not kept for print, so a badge number that changed because cards were moved or cut does not count.
+      const kept = (list) => (c.draft ? list.filter((x) => !/ · \d+ of \d+$/.test(x)) : list);
+      const words = kept(now.text.filter((x) => !was.text.includes(x))), gone = kept(was.text.filter((x) => !now.text.includes(x)));
       c.stale = words.length || gone.length || was.pic !== now.pic ? { words, was: gone, picture: was.pic !== now.pic } : null;
     }
   }
@@ -559,8 +574,9 @@ export function createCards(deps) {
     const first = s.cards.find((c) => c.imageId);
     const printed = (c) => c.slots.filter((x) => x.heading || x.text).map((x) => [x.heading, x.text].filter(Boolean).join(' ')).join(' ');
     const f = s.foundation || {};
+    const track = (key) => (s.audio?.tracks?.[key] ? `/output/cards/audio/${s.id}/${encodeURIComponent(s.audio.tracks[key].file)}` : null);
     const page = (c) => ({ id: c.id, kind: 'page', n: c.n, chapter: c.chapter || '', arc: c.arc || '', purpose: c.purpose || '', setting: c.setting || '', emotion: c.feeling || '', continuity: '', beat: c.beat || c.topic, text: c.narration || printed(c), illustration: `${c.title}${c.setting ? ` — ${c.setting}` : ''}`,
-      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [] });
+      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [], audio: track(c.id) });
     const book = {
       id: s.id, fromSeries: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, stage: s.cards.every((c) => c.title) ? 'scripted' : 'outlined',
       brief: { premise: s.brief.premise, audience: { '1-3': '0-3', '3-5': '3-5', '5-8': '5-8', '8-12': '6-9' }[s.brief.audience] || '3-5', pageCount: s.cards.length, tone: s.brief.tone,
@@ -568,7 +584,7 @@ export function createCards(deps) {
       chapterArt: s.chapterCards || {},
       title: s.title, logline: s.logline, theme: f.lesson || s.refrain || '', styleGuide: s.styleGuide || '', cast: s.cast, world: s.world || '',
       storyline: { want: f.want || '', obstacle: [f.challenge, f.failedTry && `First try: ${f.failedTry}`].filter(Boolean).join(' ') || '', turningPoint: f.turningChoice || '', resolution: s.cards.find((c) => c.arc === 'resolution')?.beat || '', change: f.change || '' },
-      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [] },
+      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, audio: track('intro'), titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [] },
         ...s.cards.map(page)],
       image: { model: s.image.model, quality: s.image.quality, size: s.image.size, textInImage: true },
     };
@@ -588,7 +604,7 @@ export function createCards(deps) {
       if (!s?.id) continue;
       if (s.brief.kind === 'story' && s.cards.length && !(await exists(path.join(BOOKS_DIR, `${s.id}.json`)))) await mirrorBook(s).catch(() => {});
       out.push({ id: s.id, title: s.title || s.brief.premise.slice(0, 60) || 'Untitled series', kind: s.brief.kind, templateId: s.brief.templateId, updatedAt: s.updatedAt,
-        cards: s.cards.length, written: s.cards.filter((c) => c.title).length, illustrated: s.cards.filter((c) => c.imageId).length, coverImageId: s.cards.find((c) => c.imageId)?.imageId || null });
+        cards: s.cards.length, cast: s.cast.filter((c) => c.characterId).length, places: (s.places || []).filter((pl) => pl.imageId).length, written: s.cards.filter((c) => c.title).length, illustrated: s.cards.filter((c) => c.imageId).length, coverImageId: s.cards.find((c) => c.imageId)?.imageId || null });
     }
     return out.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   }
@@ -672,6 +688,7 @@ export function createCards(deps) {
       a.panelWords ? `Audience: ages ${a.id} (${a.label}). ${a.guidance}. At most ${a.panelWords} words of body text per panel.` : `Audience and length: ${a.guidance}.`,
       `Number of cards: ${b.cardCount}`,
       b.tone && `Tone: ${b.tone}`, b.notes && `Other notes: ${b.notes}`,
+      b.kind === 'story' && a.id === '1-3' && TODDLER_RULES,
       chars.length && `Existing characters to use (keep these exact names; their look is fixed by reference images):\n${chars.map((c) => `- ${c.name}: ${identityLine(c)}`).join('\n')}`,
     ].filter(Boolean).join('\n');
   }
@@ -696,7 +713,8 @@ export function createCards(deps) {
     s.brief.kind = 'story';
     s.brief.characterIds = [...new Set([...src.cast.map((c) => c.characterId).filter((cid) => cid && all.some((x) => x.id === cid)), ...s.brief.characterIds])].slice(0, 8);
     s.brief.templateId = src.brief.templateId; s.brief.styleTemplateId = src.brief.styleTemplateId || '';
-    s.brief.audience = src.brief.audience; if (!s.brief.tone) s.brief.tone = src.brief.tone || '';
+    if (s.brief.audience === 'template') s.brief.audience = src.brief.audience;
+    if (!s.brief.tone) s.brief.tone = src.brief.tone || '';
     s.styleGuide = src.styleGuide || ''; s.image = cleanImage(src.image);
   }
 
@@ -708,9 +726,11 @@ export function createCards(deps) {
     const chars = s.brief.characterIds.map((cid) => all.find((c) => c.id === cid)).filter(Boolean);
     const extra = clampStr(body.instructions, 2000);
     const total = s.brief.cardCount;
+    const toddler = s.brief.kind === 'story' && s.brief.audience === '1-3';
+    const layoutIds = (layout.variants || []).map((v) => v.id).filter((v, _, all) => !toddler || !all.includes('splash') || ['splash', 'duo'].includes(v));
     const src = s.brief.kind === 'story' && s.brief.basedOn ? await readJsonFile(seriesFile(s.brief.basedOn), null).catch(() => null) : null;
     const input = `${seriesText({ ...s, title: '', logline: '', spine: '', world: '', foundation: null, refrain: '', hiddenFriend: '' }, chars)}${src ? `\n\n${establishedText(src)}` : ''}\n\n${templateText(layout)}${extra ? `\n\nRevision instructions: ${extra}` : ''}`;
-    const { parsed, durationMs, usage } = await llmJson({ name: 'card_series_plan', model: CARD_MODEL, instructions: PLAN_INSTRUCTIONS, schema: planSchema(total, (layout.variants || []).map((v) => v.id)), log: { type: 'card_series_plan', seriesId: id }, input },
+    const { parsed, durationMs, usage } = await llmJson({ name: 'card_series_plan', model: CARD_MODEL, instructions: PLAN_INSTRUCTIONS, schema: planSchema(total, layoutIds), log: { type: 'card_series_plan', seriesId: id }, input },
       (t) => progress(!t.includes('"cards"') ? { phase: 'Finding the title and cast', snippet: lastString(t, 'title') } : { phase: `Planning card ${Math.min(total, Math.max(1, countKey(t, 'topic')))} of ${total}`, done: Math.max(0, countKey(t, 'beat')), total, snippet: lastString(t, 'topic') }));
     // Second opinion for stories: an editor checks the plot (lesson, flaw, failed try, turning choice, cause and effect)
     // and returns a strengthened plan before any card is written. If that pass fails, the first plan is used.
@@ -718,7 +738,7 @@ export function createCards(deps) {
     if (s.brief.kind === 'story') {
       progress({ phase: 'The story editor is checking the plot: lesson, challenge, turning point', force: true });
       try {
-        const r = await llmJson({ name: 'card_series_plan_edit', model: CARD_MODEL, instructions: EDITOR_INSTRUCTIONS, schema: planSchema(total, (layout.variants || []).map((v) => v.id)), log: { type: 'card_series_plan_edit', seriesId: id },
+        const r = await llmJson({ name: 'card_series_plan_edit', model: CARD_MODEL, instructions: EDITOR_INSTRUCTIONS, schema: planSchema(total, layoutIds), log: { type: 'card_series_plan_edit', seriesId: id },
           input: `BRIEF AND TEMPLATE\n${input}\n\nWRITER'S PLAN (JSON)\n${JSON.stringify(parsed)}` },
           (t) => progress({ phase: `The story editor is tightening the plot${t.includes('"cards"') ? ` (card ${Math.min(total, Math.max(1, countKey(t, 'topic')))} of ${total})` : ''}`, snippet: lastString(t, 'beat') || lastString(t, 'lesson') }));
         if ((r.parsed.cards || []).length === total) { plan = r.parsed; editorUsage = r.usage; }
@@ -740,7 +760,8 @@ export function createCards(deps) {
         const linked = chars.find((k) => k.name.toLowerCase() === clampStr(c.name, 80).toLowerCase());
         return { id: crypto.randomUUID(), name: clampStr(c.name, 80), role: clampStr(c.role, 200), description: linked ? identityLine(linked) : clampStr(c.description, 1000), characterId: linked?.id || null };
       });
-      for (const c of chars) if (!x.cast.some((k) => k.characterId === c.id)) x.cast.unshift({ id: crypto.randomUUID(), name: c.name, role: 'guide character', description: identityLine(c), characterId: c.id });
+      // Characters picked by hand always join the cast; those merely inherited from an earlier story join only if the planner used them.
+      if (!src) for (const c of chars) if (!x.cast.some((k) => k.characterId === c.id)) x.cast.unshift({ id: crypto.randomUUID(), name: c.name, role: 'guide character', description: identityLine(c), characterId: c.id });
       const planned = (parsed.cards || []).slice(0, total);
       while (planned.length < total) planned.push({ topic: '', beat: '' });
       // Keep pictures and text of cards whose topic did not change.
@@ -881,7 +902,7 @@ export function createCards(deps) {
     const placeFile = place && deps.recordFile && await deps.recordFile(place.imageId);
     if (placeFile) { const buf = await fsp.readFile(placeFile).catch(() => null); if (buf) refs.push({ dataUrl: `data:image/png;base64,${buf.toString('base64')}`, label: `place: ${place.name}`, text: `location reference for "${place.name}". Set this card there: keep its landmarks, rock and plant shapes and overall arrangement, seen from whatever angle suits the picture. It shows no characters; take characters only from their own references.` }); }
     if (s.image.chain && deps.recordFile && !opts.draft) {
-      const anchor = s.cards.find((c) => c.imageId && c.id !== card.id);
+      const anchor = s.cards.find((c) => c.imageId && !c.draft && c.id !== card.id);   // never a sketch: it would drag the quality down
       const file = anchor && await deps.recordFile(anchor.imageId);
       if (file) {
         const buf = await fsp.readFile(file).catch(() => null);
@@ -1015,19 +1036,22 @@ MINOR is everything else: exact counts of background things, details of props an
   async function proposeFix(id, cardId, check) {
     const s = await getSeries(id);
     const card = s.cards.find((c) => c.id === cardId);
-    const pictureIssues = (check?.issues || []).filter((x) => !/^(Text|Extra text):/.test(x));
+    // Lettering mistakes and a missing hidden friend are never the script's fault: the prompt always asks for them.
+    const pictureIssues = (check?.issues || []).filter((x) => !/^(Text|Extra text):/.test(x) && x !== 'The hidden friend is missing');
     if (!card || !pictureIssues.length) return null;
     const t = await templatesFor(s);
     const slots = slotsFor(t.layout, card).map((slot) => ({ slot, v: card.slots.find((x) => x.key === slot.key) })).filter((x) => x.v && (x.v.heading || x.v.text || x.v.visual));
+    const tries = (card.imageIds || []).length;
     const { parsed: r } = await llmJson({ name: 'card_script_fix', model: CARD_MODEL, effort: 'low', schema: FIX_SCHEMA, log: { type: 'card_script_fix', seriesId: id, card: card.n },
       instructions: `A proofreader compared a finished children's story card with its script and flagged picture problems. Decide where the fault lies.
 "picture": the script's picture descriptions clearly ask for the thing, and the illustrator left it out or drew it wrong. Redrawing will fix it. Return no panels.
-"script": the picture descriptions never ask for the missing character, object or action (or contradict the caption, the story text or the narration), so the illustrator could not have known. Redrawing from the same script will fail again.
+"script": the picture descriptions never ask for the missing character, object or action, or mention it only in passing (a vague word such as "family" or "friends" with no number and no look; the important thing buried at the end of a long sentence; one panel asked to show two separate scenes at once), or contradict the caption, the story text or the narration. Redrawing from the same script will fail again.
 When the cause is "script", return corrected picture descriptions for only the panels that need them. Each is a complete replacement of that panel's description, at most 60 words, in the same plain style, naming exactly who is in the picture and what must be visible, including how many and what they look like if the script elsewhere says. Change as little as possible; never change captions, speech or the story. "addCharacters": cast members (exact names from the cast list) who must be drawn on this card but are not in its character list. "hero" stays "" unless the card has a main picture that needs the change.`,
       input: [`Card ${card.n} of "${s.title}": ${card.title}`, `What happens: ${card.beat}`, card.narration && `Narration: ${card.narration}`, card.storyText && `Story text: ${card.storyText}`,
         card.hero && `Main picture: ${card.hero}`, `Panels:\n${slots.map(({ slot, v }) => `- key "${slot.key}" (${slot.label}) — caption: ${v.heading || '—'} | speech: ${v.text || '—'} | picture description: ${v.visual || '—'}`).join('\n')}`,
-        `Characters listed on this card: ${card.characters.join(', ') || 'none'}`, `Cast: ${s.cast.map((c) => c.name).join(', ')}`,
-        `PROOFREADER FLAGGED:\n${pictureIssues.map((x) => `- ${x}`).join('\n')}`].filter(Boolean).join('\n\n') });
+        `Characters listed on this card: ${card.characters.join(', ') || 'none'}`, s.hiddenFriend && `(The hidden friend, ${s.hiddenFriend}, is added to every card separately; never mention it in a picture description.)`, `Cast: ${s.cast.map((c) => c.name).join(', ')}`,
+        `PROOFREADER FLAGGED:\n${pictureIssues.map((x) => `- ${x}`).join('\n')}`,
+        tries >= 2 && `This card has already been drawn ${tries} times from this script and still fails. If the description is at all vague about the flagged thing, the cause is "script": rewrite it so the thing cannot be overlooked — lead with it, say how many, what they look like and where in the frame they are, and simplify the rest.`].filter(Boolean).join('\n\n') });
     if (r.cause !== 'script') return null;
     const panels = (r.panels || []).map((x) => { const hit = slots.find((k) => k.slot.key === x.key); const to = clampStr(x.visual, 800); return hit && to && to !== hit.v.visual ? { key: x.key, label: hit.slot.label, from: hit.v.visual, to } : null; }).filter(Boolean);
     const hero = card.hero && clampStr(r.hero, 1200) && clampStr(r.hero, 1200) !== card.hero ? { from: card.hero, to: clampStr(r.hero, 1200) } : null;
@@ -1097,6 +1121,142 @@ Report only what a parent reading the cards in a row, or a sharp-eyed child, wou
     return { series: updated, continuity: updated.continuity };
   }
 
+  // ---------- narration: one spoken track per card, for a Yoto Make Your Own card or any audio player ----------
+  // Track 00 announces the title; each card's track is its read-aloud narration, with the chapter announced on the first
+  // card of a chapter. A track is recorded again only when its words or the voice changed.
+  const VOICES = ['coral', 'sage', 'nova', 'ballad', 'fable', 'shimmer', 'alloy', 'ash', 'echo', 'onyx', 'verse'];
+  const AUDIO_DIR = path.join(CARDS_DIR, 'audio');
+  const VOICE_STYLE = 'Read like a warm, gentle storyteller reading a picture book aloud to a two-year-old: unhurried, clear and smiling, with a small pause after each sentence. Give each character who speaks a slightly different, playful voice, and say sound words (boing, whoosh, plop) with fun. Never rush.';
+  function narrationTracks(s) {
+    const tracks = [{ key: 'intro', n: 0, title: s.title || 'Story', text: `${s.title}.${s.cards.length > 1 ? ` A story in ${s.cards.length} cards.` : ''}` }];
+    let chapter = '', chapterNo = 0;
+    for (const c of s.cards) {
+      const body = c.narration || c.storyText || c.slots.map((x) => [x.heading, x.text].filter(Boolean).join(' ')).filter(Boolean).join(' ');
+      if (!c.title || !body) continue;
+      const head = c.chapter && c.chapter !== chapter ? `Chapter ${++chapterNo}. ${(chapter = c.chapter)}.\n\n` : '';
+      tracks.push({ key: c.id, n: c.n, title: c.title, text: `${head}${body}` });
+    }
+    return tracks;
+  }
+  async function handleNarrate(id, body = {}, progress = () => {}) {
+    let s = await getSeries(id);
+    if (s.brief.kind !== 'story') throw new HttpError(400, 'Narration is for story series.');
+    const voice = VOICES.includes(body.voice) ? body.voice : s.audio?.voice || 'coral';
+    const tracks = narrationTracks(s);
+    if (tracks.length < 2) throw new HttpError(400, 'Write the cards first.');
+    const dir = path.join(AUDIO_DIR, id);
+    await fsp.mkdir(dir, { recursive: true });
+    const old = s.audio?.tracks || {}, next = {};
+    let made = 0, cost = 0, done = 0;
+    for (const t of tracks) {
+      const hash = sha(`${voice}|${t.text}`);
+      progress({ phase: t.n ? `Recording card ${t.n} of ${s.cards.length}` : 'Recording the title', done: done++, total: tracks.length, snippet: t.title, force: true });
+      const prev = old[t.key];
+      if (prev && prev.hash === hash && !body.redo && await exists(path.join(dir, prev.file))) { next[t.key] = prev; continue; }
+      const r = await deps.ai.speech({ feature: 'card_narration', refs: { seriesId: id }, voice, input: t.text, instructions: VOICE_STYLE });
+      const file = `${String(t.n).padStart(2, '0')}-${slugify(t.title) || 'card'}-${hash.slice(0, 6)}.mp3`;
+      await fsp.writeFile(path.join(dir, file), r.buffer);
+      next[t.key] = { file, hash, seconds: r.seconds, at: new Date().toISOString() };
+      made++; cost += r.costUsd || 0;
+    }
+    for (const f of await fsp.readdir(dir).catch(() => [])) if (!Object.values(next).some((t) => t.file === f)) await fsp.rm(path.join(dir, f), { force: true });
+    s = await withSeries(id, (x) => { x.audio = { voice, tracks: next, at: new Date().toISOString() }; return x; });
+    await appendLog({ type: 'card_narration', seriesId: id, voice, tracks: tracks.length, recorded: made, costUsd: cost });
+    return { series: s, recorded: made, tracks: tracks.length, costUsd: cost };
+  }
+  // The tracks in reading order with plain numbered names, ready to drop onto a Yoto Make Your Own playlist.
+  async function exportAudioZip(id) {
+    const s = await getSeries(id);
+    const folder = slugify(s.title || 'story'), entries = [], list = [];
+    for (const t of narrationTracks(s)) {
+      const a = s.audio?.tracks?.[t.key];
+      const data = a && await fsp.readFile(path.join(AUDIO_DIR, id, a.file)).catch(() => null);
+      if (!data) continue;
+      const name = `${String(t.n).padStart(2, '0')} ${t.n ? t.title.replace(/[‘’]/g, "'").replace(/[\\/:*?"<>|“”]/g, '') : 'Title'}.mp3`;
+      entries.push({ name: `${folder}/${name}`, data }); list.push(name);
+    }
+    if (!entries.length) throw new HttpError(400, 'Record the narration first.');
+    entries.push({ name: `${folder}/playlist.m3u`, data: Buffer.from(list.join('\n') + '\n') });
+    return { zip: zipStore(entries), filename: `${folder}-audio.zip` };
+  }
+  // Which tracks no longer match the text (shown as "out of date" in the page).
+  const audioState = (s) => { const tracks = narrationTracks(s); const a = s.audio; return { tracks: tracks.length, stale: a ? tracks.filter((t) => a.tracks[t.key]?.hash !== sha(`${a.voice}|${t.text}`)).map((t) => t.key) : tracks.map((t) => t.key) }; };
+
+  // ---------- card backs: a typeset reverse side for double-sided printing ----------
+  // The back carries what the reader needs while the child looks at the picture: the card's number and chapter, the
+  // read-aloud text, the play prompt and the note for grown-ups. Typeset as HTML and photographed with headless Chrome
+  // (2048 × 3072, the same 2:3 shape as the fronts), so every word is exact. Files: output/cards/backs/<series>/.
+  const CHROME = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const BACKS_DIR = path.join(CARDS_DIR, 'backs');
+  const BACK_HUES = [205, 28, 150, 265, 345, 48, 180, 300];
+  const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function backHtml({ hue, band, kicker, title, label, body, boxes = [], foot = [] }) {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0}
+html,body{width:1024px;height:1536px}
+body{background:hsl(${hue} 60% 96%);color:#22303c;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;padding:64px;display:flex;flex-direction:column;gap:26px;overflow:hidden}
+.band{display:flex;justify-content:space-between;align-items:center;background:hsl(${hue} 55% 42%);color:#fff;border-radius:22px;padding:16px 26px;font:600 27px "Arial Rounded MT Bold","Avenir Next",sans-serif}
+.kicker{font:600 26px "Avenir Next",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:hsl(${hue} 50% 38%)}
+h1{font:700 76px/1.02 "Arial Rounded MT Bold","Avenir Next",sans-serif;color:hsl(${hue} 60% 30%)}
+.label{font:600 22px "Avenir Next",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:hsl(${hue} 30% 45%)}
+#body{flex:1;min-height:0;font:500 44px/1.42 Georgia,"Times New Roman",serif;white-space:pre-wrap;overflow:hidden}
+.box{background:#fff;border:3px solid hsl(${hue} 50% 80%);border-radius:22px;padding:18px 24px;font-size:29px;line-height:1.3}
+.box b{display:block;font:600 21px "Avenir Next",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:hsl(${hue} 50% 38%);margin-bottom:4px}
+.foot{font-size:24px;line-height:1.35;color:hsl(${hue} 25% 38%);border-top:3px dotted hsl(${hue} 45% 72%);padding-top:16px}
+.foot i{font:italic 600 30px Georgia,serif;color:hsl(${hue} 55% 34%);display:block;margin-bottom:4px}
+</style></head><body>
+<div class="band"><span>${esc(band[0])}</span><span>${esc(band[1])}</span></div>
+<div>${kicker ? `<div class="kicker">${esc(kicker)}</div>` : ''}<h1>${esc(title)}</h1></div>
+${label ? `<div class="label">${esc(label)}</div>` : ''}<div id="body">${esc(body)}</div>
+${boxes.map(([k, v]) => `<div class="box"><b>${esc(k)}</b>${esc(v)}</div>`).join('')}
+${foot.length ? `<div class="foot">${foot.map(([k, v]) => (k === 'i' ? `<i>${esc(v)}</i>` : `<div>${esc(v)}</div>`)).join('')}</div>` : ''}
+<script>const b=document.getElementById('body');let s=44;while(b.scrollHeight>b.clientHeight+1&&s>20){s-=1;b.style.fontSize=s+'px';}</script>
+</body></html>`;
+  }
+  function backsFor(s) {
+    const out = [], chapters = [];
+    for (const c of s.cards) if (c.chapter && !chapters.includes(c.chapter)) chapters.push(c.chapter);
+    const story = s.brief.kind === 'story';
+    out.push({ key: 'cover', name: '00-cover', spec: { hue: BACK_HUES[0], band: [story ? `A story in ${s.cards.length} cards` : `${s.cards.length} cards`, ''], title: s.title, label: 'The story', body: s.logline,
+      boxes: [story && ['How to read it', 'Show the picture side and read the back aloud. Each card has something to say, find or do together.'], story && s.cast.length && ['Who is in it', s.cast.map((c) => callName(c.name, s)).join(', ')], s.foundation?.lesson && ['For grown-ups: what it is about', s.foundation.lesson]].filter(Boolean),
+      foot: [s.refrain && ['i', `“${s.refrain}”`], s.hiddenFriend && ['', `Hidden on every card: ${s.hiddenFriend}`]].filter(Boolean) } });
+    for (const c of s.cards) {
+      if (!c.title) continue;
+      const play = c.slots.find((x) => x.key === 'play'), grown = c.slots.find((x) => x.key === 'grown-ups');
+      const body = c.narration || c.storyText || c.slots.filter((x) => x !== play && x !== grown).map((x) => [x.heading, x.text].filter(Boolean).join(' — ')).filter(Boolean).join('\n');
+      out.push({ key: c.id, name: `${String(c.n).padStart(2, '0')}-${slugify(c.title) || 'card'}`, spec: { hue: BACK_HUES[(c.chapter ? chapters.indexOf(c.chapter) : c.n - 1) % BACK_HUES.length], band: [s.title, `${c.n} of ${s.cards.length}`], kicker: c.chapter ? `Chapter ${chapters.indexOf(c.chapter) + 1} · ${c.chapter}` : '', title: c.title, label: story ? 'Read aloud' : '', body,
+        boxes: [play && (play.heading || play.text) && ['Together', [play.heading, play.text].filter(Boolean).join(' ')], grown?.text && ['For grown-ups', grown.text.replace(/^for grown-ups:\s*/i, '')]].filter(Boolean),
+        foot: [c.closing && ['i', c.closing]].filter(Boolean) } });
+    }
+    return out;
+  }
+  async function handleBacks(id, body = {}) {
+    const s = await getSeries(id);
+    if (!s.cards.some((c) => c.title)) throw new HttpError(400, 'Write the cards first.');
+    if (!(await exists(CHROME))) throw new HttpError(400, 'Card backs are typeset with Google Chrome, which was not found. Install it, or set CHROME_BIN in .env to a Chrome or Chromium binary.');
+    const dir = path.join(BACKS_DIR, id);
+    await fsp.mkdir(dir, { recursive: true });
+    const old = s.backs || {}, next = {};
+    let made = 0;
+    for (const b of backsFor(s)) {
+      const html = backHtml(b.spec), hash = sha(html), prev = old[b.key];
+      if (prev && prev.hash === hash && !body.redo && await exists(path.join(OUTPUT_DIR, prev.rel))) { next[b.key] = prev; continue; }
+      const file = `${b.name}-${hash.slice(0, 6)}.png`, src = path.join(dir, `${b.name}.html`);
+      await fsp.writeFile(src, html);
+      const ok = await new Promise((resolve) => execFile(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2', '--window-size=1024,1536', '--virtual-time-budget=3000', `--screenshot=${path.join(dir, file)}`, `file://${src}`], { timeout: 60000 }, (err) => resolve(!err)));
+      await fsp.rm(src, { force: true });
+      if (!ok || !(await exists(path.join(dir, file)))) throw new HttpError(500, `Chrome could not typeset the back of ${b.name}.`);
+      next[b.key] = { rel: path.relative(OUTPUT_DIR, path.join(dir, file)), hash, at: new Date().toISOString() };
+      made++;
+    }
+    for (const f of await fsp.readdir(dir).catch(() => [])) if (!Object.values(next).some((x) => path.basename(x.rel) === f)) await fsp.rm(path.join(dir, f), { force: true });
+    const updated = await withSeries(id, (x) => { x.backs = next; return x; });
+    await appendLog({ type: 'card_backs', seriesId: id, backs: Object.keys(next).length, made });
+    return { series: updated, made, backs: Object.keys(next).length };
+  }
+  // Which backs no longer match the text.
+  const backsStale = (s) => (s.backs ? backsFor(s).filter((b) => s.backs[b.key]?.hash !== sha(backHtml(b.spec))).map((b) => b.key) : []);
+
   // ---------- text tidy: caption length and steady naming, after writing ----------
   // The name the story actually uses for a character: "Ollie" rather than "Ollie the Octopus" when the text says Ollie.
   function callName(name, s) {
@@ -1117,7 +1277,7 @@ Report only what a parent reading the cards in a row, or a sharp-eyed child, wou
     const { parsed } = await llmJson({ name: 'card_text_tidy', model: CARD_MODEL, effort: 'low', log: { type: 'card_text_tidy', seriesId: id },
       schema: obj({ cards: { type: 'array', items: obj({ n: { type: 'integer' }, captions: { type: 'array', items: obj({ key: str(), caption: str() }) }, storyText: str() }) } }),
       instructions: `You are the copy editor for a children's story told on cards. Return every card with its captions and storyText corrected to these rules, changing as little as possible and never changing what happens:
-1. Each caption is at most 9 words. Shorten by cutting, not by dropping the character's name or the action.
+1. Each caption is at most ${a.id === '1-3' ? 6 : 9} words. Shorten by cutting, not by dropping the character's name or the action.
 2. One name per character and per thing: replace nicknames and stand-ins ("the baby", "the little one", "the octopus", "his passenger") with the character's call-name exactly as listed, and call each object and place by the same plain word every time. Ordinary pronouns (he, she, his, its, they) are fine and should stay wherever it is clear who is meant; do not repeat a name three times in one sentence. Never lengthen a name that is already the call-name.
 5. Keep the linking words that join one caption to the next (But, So, Then, Because).
 3. storyText is ${storyWords(a)} words ("" stays ""). Trim or pad lightly to fit.
@@ -1187,11 +1347,15 @@ Leave text that already follows the rules exactly as it is.`,
     const made = [];
     const tail = ['', `Style (the same rendering and character designs as the story cards): ${style}`, '', 'Constraints:', '- Letter the quoted text exactly, with correct spelling; no other text, no logos, no watermark.', '- Keep all lettering inside a safe margin of about 5% from every edge; the art runs to the edge.', '- One single picture: no comic panels, no speech bubbles, no boxes.'];
     if (!s.cover?.imageId || body.redoCover) {
-      const cast = linked();
-      const names = s.cast.map((c) => c.name);
+      // The cover shows who the story is about: the cast in order of how many cards they appear on.
+      const seen = (c) => s.cards.filter((k) => k.characters.includes(c.name)).length;
+      const onCards = s.cast.filter((c) => seen(c) > 0);
+      const order = (onCards.length ? onCards : s.cast).slice().sort((a, b) => seen(b) - seen(a));
+      const cast = linked(order.map((c) => c.name)).sort((a, b) => seen(b) - seen(a));
+      const names = order.map((c) => c.name);
       const rec = await draw([`Front cover of the children's story card set ${quoted(s.title)}.`, '', `Lettering: the title ${quoted(s.title)} in huge, puffy, joyful lettering across the top third. Near the bottom, small: ${quoted(`A story in ${s.cards.length} cards`)}.`,
         '', `Picture: ${names.slice(0, 5).join(', ')} together in the world of the story, warm and inviting, the main character ${names[0]} largest and in the centre, looking at the reader. ${s.logline}`, s.world && `World: ${s.world}`,
-        cast.length < names.length ? `Characters without reference images: ${s.cast.filter((c) => !cast.includes(c)).map((c) => `${c.name}: ${c.description}`).join(' | ')}` : '', ...tail].filter((l) => l != null && l !== false).join('\n'), `${s.title} — cover`, cast, 'cover');
+        cast.length < names.length ? `Characters without reference images: ${order.filter((c) => !cast.includes(c)).map((c) => `${c.name}: ${c.description}`).join(' | ')}` : '', ...tail].filter((l) => l != null && l !== false).join('\n'), `${s.title} — cover`, cast, 'cover');
       made.push(rec);
       s = await withSeries(id, (x) => { x.cover = { imageId: rec.id, imageIds: [...(x.cover?.imageIds || []), rec.id] }; return x; });
     }
@@ -1437,8 +1601,11 @@ Leave text that already follows the rules exactly as it is.`,
     else if (m === 'POST' && a === 'plan') { const body = await readJson(req); await getSeries(id); await streamed(res, url, CARD_MODEL, (progress) => handlePlan(id, body, progress)); }
     else if (m === 'POST' && a === 'write') { const body = await readJson(req); await getSeries(id); await streamed(res, url, CARD_MODEL, (progress) => handleWrite(id, body, progress)); }
     else if (m === 'POST' && a === 'cards' && c === 'image') send(res, 200, await handleCardImage(id, b, await readJson(req)));
-    else if (m === 'POST' && a === 'cards' && c === 'check') { const check = await checkCard(id, b); const proposal = check.pass ? null : await proposeFix(id, b, check).catch(() => null); send(res, 200, { check: { ...check, proposal }, series: await getSeries(id) }); }
+    else if (m === 'POST' && a === 'cards' && c === 'check') { const check = await checkCard(id, b); const proposal = check.pass ? null : await proposeFix(id, b, check).catch((e) => { console.error('script fix failed', e.message); return null; }); send(res, 200, { check: { ...check, proposal }, series: await getSeries(id) }); }
     else if (m === 'POST' && a === 'cards' && c === 'fix') send(res, 200, await handleApplyFix(id, b, await readJson(req)));
+    else if (m === 'POST' && a === 'narrate') { const body = await readJson(req); await getSeries(id); await streamed(res, url, 'the narrator', (progress) => handleNarrate(id, body, progress)); }
+    else if (m === 'GET' && a === 'audio.zip') { const { zip, filename } = await exportAudioZip(id); res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length, 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' }); res.end(zip); }
+    else if (m === 'POST' && a === 'backs') send(res, 200, await handleBacks(id, await readJson(req)));
     else if (m === 'POST' && a === 'continuity') send(res, 200, await handleContinuity(id));
     else if (m === 'POST' && a === 'tidy') send(res, 200, await tidyText(id));
     else if (m === 'POST' && a === 'places') send(res, 200, await handlePlaces(id));
@@ -1455,5 +1622,5 @@ Leave text that already follows the rules exactly as it is.`,
     return true;
   }
 
-  return { route, characterBible, config: () => ({ model: CARD_MODEL, visionModel: CARD_VISION_MODEL, audiences: CARD_AUDIENCES, archetypes: ARCHETYPES, slotRoles: SLOT_ROLES, playTypes: PLAY_TYPES, arcStages: ARC_IDS, foundationFields: FOUNDATION_FIELDS.map(([id, label]) => ({ id, label })), maxCards: MAX_CARDS, maxSlots: MAX_SLOTS }) };
+  return { route, characterBible, config: () => ({ model: CARD_MODEL, visionModel: CARD_VISION_MODEL, audiences: CARD_AUDIENCES, archetypes: ARCHETYPES, slotRoles: SLOT_ROLES, playTypes: PLAY_TYPES, arcStages: ARC_IDS, foundationFields: FOUNDATION_FIELDS.map(([id, label]) => ({ id, label })), maxCards: MAX_CARDS, maxSlots: MAX_SLOTS, voices: VOICES }) };
 }

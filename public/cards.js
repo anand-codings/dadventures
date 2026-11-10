@@ -13,6 +13,8 @@ const els = {
   viewLibrary: $('view-library'), groups: $('groups'), detail: $('detail'), library: $('library'), viewTemplates: $('view-templates'), viewSeries: $('view-series'),
   seriesEmpty: $('series-empty'), series: $('series'), title: $('title'), logline: $('logline'), styleGuide: $('style-guide'), storyBox: $('story-box'), spine: $('spine'), refrain: $('refrain'), hiddenFriend: $('hidden-friend'), script: $('script'), planInstructions: $('plan-instructions'), replan: $('replan'),
   addCast: $('add-cast'), cast: $('cast'), cardsMeta: $('cards-meta'), cards: $('cards'), addCard: $('add-card'),
+  basedOn: $('based-on'), basedOnField: $('based-on-field'), redrawStale: $('redraw-stale'), viewToggle: $('view-toggle'), board: $('board'), boardGrid: $('board-grid'), boardFoot: $('board-foot'),
+  continuity: $('continuity'), checkBook: $('check-book'), makeBacks: $('make-backs'), voice: $('voice'), narrate: $('narrate'), audioZip: $('audio-zip'), audioState: $('audio-state'), introAudio: $('intro-audio'),
 };
 
 let config = null;
@@ -30,6 +32,7 @@ const briefChars = new Set();
 const records = new Map();        // history records by id
 let busy = false;
 let stopRequested = false;
+let view = 'cards';               // series view: 'cards' (the editor) or 'board' (the storyboard)
 const LAST_SERIES = 'dadventures.lastCardSeries';
 const LAST_TAB = 'dadventures.cardsTab';
 
@@ -37,7 +40,7 @@ const LAST_TAB = 'dadventures.cardsTab';
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 const fmtCost = (v) => (v == null ? '' : `$${v < 0.1 ? v.toFixed(3) : v.toFixed(2)}`);
 const words = (t) => (String(t || '').trim() ? String(t).trim().split(/\s+/).length : 0);
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : /(ch|sh|s|x)$/.test(w) ? 'es' : 's'}`;
 function setStatus(text, kind = '') { els.status.className = `status ${kind}`; els.status.innerHTML = text; }
 async function api(method, path, body) {
   const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -114,7 +117,7 @@ let focusCard = null;             // card number the link points at
 function syncUrl() {
   if (!ready || applying) return;
   urlState.set(
-    { tab, series: series?.id, template: tpl?.id, filter: els.libFilter.value, q: els.libSearch.value.trim(), detail: els.detail.hidden ? '' : els.detail.dataset.id, card: series ? focusCard : '' },
+    { tab, series: series?.id, template: tpl?.id, filter: els.libFilter.value, q: els.libSearch.value.trim(), detail: els.detail.hidden ? '' : els.detail.dataset.id, card: series ? focusCard : '', view: series && view === 'board' ? 'board' : '' },
     { pushOn: started ? ['tab', 'series', 'template'] : [] });
 }
 const goToCard = (id) => document.querySelector(`.page-card[data-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -123,6 +126,7 @@ async function applyUrl(first = false) {
   try {
     const want = urlState.get('series'), sid = seriesList.some((x) => x.id === want) ? want : '';
     if (first || (series?.id || '') !== sid) { await openSeries(sid); if (!sid) onTemplateChosen(); }
+    view = series && urlState.get('view') === 'board' ? 'board' : 'cards';
     const tid = urlState.get('template') || '';
     if ((tpl?.id || '') !== tid) { await flushTpl(); tpl = templates.find((x) => x.id === tid) || null; }
     const filter = urlState.get('filter') || '';
@@ -147,7 +151,7 @@ function setTab(t) {
   for (const c of document.querySelectorAll('.tab-controls')) c.hidden = c.dataset.for !== t;
   els.viewLibrary.hidden = t !== 'library'; els.viewTemplates.hidden = t !== 'templates'; els.viewSeries.hidden = t !== 'series';
   els.stepper.hidden = els.flowRow.hidden = t !== 'series'; els.strip.hidden = t !== 'series';
-  if (t !== 'series') els.upscale.hidden = els.draftAll.hidden = true;
+  if (t !== 'series') els.upscale.hidden = els.draftAll.hidden = els.redrawStale.hidden = true;
   if (t === 'templates') { renderTplList(); renderTemplate(); }
   if (t === 'series') renderSeries();
   syncUrl();
@@ -372,7 +376,7 @@ const kind = () => document.querySelector('input[name=kind]:checked').value;
 const currentTemplate = () => templates.find((t) => t.id === (series?.brief.templateId || els.template.value));
 const audience = () => config.cards.audiences.find((a) => a.id === (series?.brief.audience || els.audience.value)) || config.cards.audiences[0];
 const readBrief = () => ({ kind: kind(), templateId: els.template.value, styleTemplateId: els.styleTemplate.value, premise: els.premise.value, topics: els.topics.value, lesson: els.lesson.value, audience: els.audience.value,
-  cardCount: Number(els.cardCount.value) || 6, tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars] });
+  cardCount: Number(els.cardCount.value) || 6, tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars], basedOn: els.basedOn.value });
 const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
 function writeBrief() {
   const b = series?.brief, im = series?.image;
@@ -380,16 +384,39 @@ function writeBrief() {
   if (b) { els.template.value = b.templateId; els.styleTemplate.value = b.styleTemplateId || ''; }
   els.premise.value = b?.premise || ''; els.topics.value = b?.topics || ''; els.lesson.value = b?.lesson || ''; els.audience.value = b?.audience || 'template'; els.cardCount.value = b?.cardCount || 6; els.tone.value = b?.tone || ''; els.notes.value = b?.notes || '';
   briefChars.clear(); for (const id of b?.characterIds || []) briefChars.add(id);
+  fillBasedOn();
   if (im) { els.imgModel.value = im.model; els.imgQuality.value = im.quality; ensureSize(im.size); }
   els.textMode.value = im?.textMode || 'captions';
   els.proof.checked = im?.proof ?? true;
   els.useTemplateRef.checked = im?.useTemplateRef ?? true; els.chain.checked = im?.chain ?? true; els.badge.checked = im?.badge ?? true;
   renderBriefChars(); kindChanged(); artSummary();
 }
+// Earlier stories whose world can be continued: their cast, look, world text and painted places carry over.
+function fillBasedOn() {
+  const cur = series?.brief.basedOn || '';
+  els.basedOn.innerHTML = '<option value="">No — a new world</option>' + seriesList.filter((x) => x.kind === 'story' && x.cards && x.id !== series?.id).map((x) => `<option value="${x.id}">${escapeHtml(x.title)} · ${plural(x.cast || 0, 'character')}${x.places ? `, ${plural(x.places, 'painted place')}` : ''}</option>`).join('');
+  els.basedOn.value = [...els.basedOn.options].some((o) => o.value === cur) ? cur : '';
+  els.basedOn.disabled = Boolean(series?.cards.length);
+  els.basedOn.title = series?.cards.length ? 'Chosen before the series is planned. Start a new series to continue a different story.' : '';
+}
+els.basedOn.addEventListener('change', async () => {
+  const src = seriesList.find((x) => x.id === els.basedOn.value);
+  try {
+    if (!series) {
+      if (!src) return;
+      document.querySelector('input[name=kind][value=story]').checked = true;
+      if (src.templateId) els.template.value = src.templateId;
+      await ensureSeries();
+    } else { await flush(); series = await api('PATCH', `/api/cards/series/${series.id}`, { brief: { basedOn: els.basedOn.value } }); }
+    writeBrief(); renderSeries();
+    setStatus(src ? `This story continues “${escapeHtml(src.title)}”: its characters are selected below, and its look, world and painted places are used when you plan. Say what happens in this new story, then plan it.` : 'This series starts a new world.', 'ok');
+  } catch (e) { setStatus(escapeHtml(e.message), 'error'); }
+});
 function ensureSize(size) { if (![...els.imgSize.options].some((o) => o.value === size)) { const o = document.createElement('option'); o.value = size; o.textContent = size.replace('x', ' × '); els.imgSize.appendChild(o); } els.imgSize.value = size; }
 function kindChanged() {
   els.premiseLabel.textContent = kind() === 'story' ? 'What is the story?' : 'What is the series about?';
   els.premise.placeholder = kind() === 'story' ? 'Pip the puffin loses her way in the fog and learns how birds navigate home.' : 'Animals that live in tide pools.';
+  els.basedOnField.hidden = kind() !== 'story' && !els.basedOn.value;
 }
 function onTemplateChosen() { const t = templates.find((x) => x.id === els.template.value); if (t && !series) ensureSize(t.size || '1024x1536'); artSummary(); }
 function artSummary() { const est = estimateImageCost(els.imgModel.value, els.imgSize.value, els.imgQuality.value); els.artSummary.textContent = `${els.imgSize.value.replace('x', '×')} · ${els.imgQuality.value}${est ? ` · ≈ ${fmtCost(est)} per card` : ''}`; }
@@ -433,7 +460,7 @@ async function flush() {
   if (!series || !Object.keys(pending).length) return;
   const body = { ...pending, ...(pending.cards ? { cards: Object.values(pending.cards) } : {}) };
   pending = {}; setSave('Saving…');
-  try { series = await api('PATCH', `/api/cards/series/${series.id}`, body); setSave('All changes saved', 'ok'); refreshFlow(); }
+  try { series = await api('PATCH', `/api/cards/series/${series.id}`, body); setSave('All changes saved', 'ok'); refreshFlow(); syncStaleChips(); }
   catch (e) { setSave(`Not saved: ${e.message}`, 'error'); }
 }
 window.addEventListener('beforeunload', (e) => { if (Object.keys(pending).length || tplDirty) { flush(); flushTpl(); e.preventDefault(); } });
@@ -444,16 +471,17 @@ async function loadSeriesList() {
   els.seriesSelect.innerHTML = '<option value="">Open a series…</option>';
   for (const s of seriesList) { const o = document.createElement('option'); o.value = s.id; o.textContent = `${s.title}${s.cards ? ` · ${s.illustrated}/${s.cards} pictures` : ' · brief only'}`; els.seriesSelect.appendChild(o); }
   els.seriesSelect.value = series?.id || '';
+  fillBasedOn();
 }
 async function openSeries(id) {
   await flush();
   series = id ? await api('GET', `/api/cards/series/${id}`).catch(() => null) : null;
-  focusCard = null;
+  focusCard = null; view = 'cards'; voicePick = null;
   if (series) localStorage.setItem(LAST_SERIES, series.id); else localStorage.removeItem(LAST_SERIES);
   els.seriesSelect.value = series?.id || '';
   writeBrief(); renderSeries();
 }
-async function newSeries() { await flush(); series = null; focusCard = null; localStorage.removeItem(LAST_SERIES); els.seriesSelect.value = ''; writeBrief(); onTemplateChosen(); renderSeries(); setStatus(''); }
+async function newSeries() { await flush(); series = null; focusCard = null; view = 'cards'; localStorage.removeItem(LAST_SERIES); els.seriesSelect.value = ''; writeBrief(); onTemplateChosen(); renderSeries(); setStatus(''); }
 async function ensureSeries() {
   if (series) { await flush(); return; }
   if (!els.template.value) throw new Error('Make a template first (Library tab), then choose it here.');
@@ -474,7 +502,10 @@ const unwritten = () => (series ? series.cards.filter((c) => !c.title) : []);
 const unpictured = () => (series ? series.cards.filter((c) => c.title && (!c.imageId || c.draft)) : []);
 // The largest upscaled copy of a card picture, if one exists (made here or on the Images page).
 const upscaledOf = (id) => [...records.values()].filter((r) => r.upscaleOf === id && !r.deletedAt && !r.missing).sort((a, b) => (b.width || 0) - (a.width || 0))[0];
-const notUpscaled = () => (series ? series.cards.filter((c) => records.has(c.imageId) && !upscaledOf(c.imageId)) : []);
+// Cards with a final picture whose words or picture description were edited after it was drawn.
+const staleCards = () => (series ? series.cards.filter((c) => c.imageId && !c.draft && c.stale) : []);
+const hasDrafts = () => Boolean(series?.cards.some((c) => c.imageId && c.draft));
+const notUpscaled = () => (series ? series.cards.filter((c) => !c.draft && records.has(c.imageId) && !upscaledOf(c.imageId)) : []);
 const UPSCALE_MODEL = 'realesrgan-x4plus';
 function refreshFlow() {
   if (!config) return;
@@ -490,25 +521,40 @@ function refreshFlow() {
   }
   const est = estimateImageCost(els.imgModel.value, els.imgSize.value, els.imgQuality.value);
   const n = unpictured().length;
-  els.next.textContent = current === 'plan' ? 'Plan the series' : current === 'write' ? `Write ${plural(unwritten().length, 'card')}` : current === 'images' ? `Illustrate ${plural(n, 'card')}${est ? ` (≈ ${fmtCost(est * n)})` : ''}` : 'Send to Print Sheets';
-  els.next.dataset.step = current;
+  // With sketches on the table, the storyboard is reviewed (and approved there) before the final pictures are paid for.
+  const review = current === 'images' && hasDrafts() && view !== 'board';
+  els.next.textContent = current === 'plan' ? 'Plan the series' : current === 'write' ? `Write ${plural(unwritten().length, 'card')}` : review ? 'Review the storyboard →' : current === 'images' ? `${hasDrafts() ? 'Approve and illustrate' : 'Illustrate'} ${plural(n, 'card')}${est ? ` (≈ ${fmtCost(est * n)})` : ''}` : 'Send to Print Sheets';
+  els.next.dataset.step = review ? 'review' : current;
+  const stale = staleCards().length;
+  els.redrawStale.hidden = tab !== 'series' || !stale; els.redrawStale.disabled = busy;
+  els.redrawStale.textContent = `↻ Redraw ${plural(stale, 'changed card')}${est ? ` (≈ ${fmtCost(est * stale)})` : ''}`;
+  els.viewToggle.hidden = tab !== 'series' || !cards.some((c) => c.title);
+  for (const b of els.viewToggle.children) b.classList.toggle('on', b.dataset.view === view);
+  els.checkBook.disabled = busy; if (series?.cards.length && view !== 'board') renderAudio();
+  for (const b of els.boardFoot.querySelectorAll('[data-b=approve], [data-b=sketch-all], [data-b=places]')) b.disabled = busy || (b.dataset.b === 'approve' && unwritten().length > 0);
   const undrafted = cards.filter((c) => c.title && !c.imageId).length;
-  els.draftAll.hidden = tab !== 'series' || !undrafted; els.draftAll.disabled = busy; els.draftAll.textContent = `✏️ Draft storyboard (${undrafted} quick sketches)`;
-  for (const b of [els.makePlaces, els.makeExtras, els.tidy]) b.disabled = busy;
+  els.draftAll.hidden = tab !== 'series' || !undrafted; els.draftAll.disabled = busy; els.draftAll.textContent = `✏️ Draft storyboard (${plural(undrafted, 'quick sketch')})`;
+  for (const b of [els.makePlaces, els.makeExtras, els.tidy, els.makeBacks]) b.disabled = busy;
+  const nb = series?.backs ? Object.keys(series.backs).length : 0, sb = (series?.backsStale || []).length;
+  els.makeBacks.textContent = !nb ? '🂠 Card backs' : sb ? `🂠 Update ${plural(sb, 'card back')}` : `🂠 ${plural(nb, 'card back')} ready`;
   els.redrawAll.hidden = !cards.some((c) => c.imageId); els.redrawAll.disabled = busy;
   els.next.disabled = busy;
   const up = notUpscaled().length;
   els.upscale.hidden = !up || !config.upscale.options.some((o) => o.id === UPSCALE_MODEL);
   els.upscale.disabled = busy;
   els.upscale.textContent = `⬆ Upscale ${plural(up, 'card')} ×4 for print`;
-  els.strip.innerHTML = cards.map((c) => `<button class="tile${c.imageId ? ' pictured' : c.title ? ' written' : ''}" data-id="${c.id}" title="${escapeHtml(c.title || c.topic)}" type="button">${c.imageId ? `<img src="${escapeHtml(recThumb(c.imageId))}" alt="">` : ''}<span>${c.n}</span></button>`).join('');
+  els.strip.innerHTML = cards.map((c) => `<button class="tile${c.imageId ? ' pictured' : c.title ? ' written' : ''}${c.imageId && c.stale ? ' stale' : ''}" data-id="${c.id}" title="${escapeHtml(c.title || c.topic)}" type="button">${c.imageId ? `<img src="${escapeHtml(recThumb(c.imageId))}" alt="">` : ''}<span>${c.n}</span></button>`).join('');
 }
 els.strip.addEventListener('click', (e) => {
   const t = e.target.closest('.tile'); if (!t) return;
   focusCard = String(series.cards.find((c) => c.id === t.dataset.id)?.n || '') || null;
+  if (view === 'board') setView('cards');
   syncUrl(); goToCard(t.dataset.id);
 });
-els.next.addEventListener('click', () => ({ plan, write: () => write(), images: illustrateAll, print: sendToSheets }[els.next.dataset.step])());
+function setView(v) { view = v === 'board' ? 'board' : 'cards'; renderSeries(); if (view === 'board') els.board.scrollIntoView({ block: 'nearest' }); }
+els.viewToggle.addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
+els.redrawStale.addEventListener('click', () => illustrateAll(staleCards()));
+els.next.addEventListener('click', () => ({ plan, write: () => write(), review: () => setView('board'), images: () => illustrateAll(), print: sendToSheets }[els.next.dataset.step])());
 els.replan.addEventListener('click', () => plan(els.planInstructions.value));
 els.stepper.addEventListener('click', (e) => { if (e.target.closest('li')?.dataset.step === 'print' && series?.cards.some((c) => c.imageId)) sendToSheets(); });
 els.stop.addEventListener('click', () => { stopRequested = true; els.stop.disabled = true; });
@@ -532,7 +578,7 @@ async function write(cardIds, instructions = '') {
   });
 }
 async function illustrate(cardId, body = {}) {
-  const el = document.querySelector(`.page-card[data-id="${cardId}"]`);
+  const el = document.querySelector(`.${view === 'board' ? 'board-card' : 'page-card'}[data-id="${cardId}"]`);
   el?.classList.add('working');
   try {
     const r = await api('POST', `/api/cards/series/${series.id}/cards/${cardId}/image`, body);
@@ -550,7 +596,8 @@ async function draftAll() {
       onProgress({ phase: `Sketching card ${c.n} of ${series.cards.length}`, done, total: todo.length, snippet: c.title });
       const r = await illustrate(c.id, { draft: true }); done++; spent += r.record.costUsd || 0; renderSeries();
     }
-    setStatus(`Sketched ${plural(done, 'card')}${spent ? ` for ${fmtCost(spent)}` : ''}. Read the story through the pictures, fix any card's text, then Illustrate draws the final versions.`, 'ok');
+    setStatus(`Sketched ${plural(done, 'card')}${spent ? ` for ${fmtCost(spent)}` : ''}. Read the story through the pictures below: move, cut or rewrite cards, then approve to draw the final versions.`, 'ok');
+    if (done) { view = 'board'; renderSeries(); }
   });
   els.stop.hidden = true;
 }
@@ -560,7 +607,18 @@ async function seriesAction(label, path, body, done) {
 }
 els.makePlaces.addEventListener('click', () => seriesAction('Painting the place references', 'places', {}, (r) => `${plural(series.places.length, 'place')} set up${r.records.length ? `, ${r.records.length} painted` : ''}. New pictures of cards set there will use them.`));
 els.makeExtras.addEventListener('click', () => seriesAction('Drawing the cover and chapter cards', 'extras', {}, (r) => (r.records.length ? `Drew ${plural(r.records.length, 'card')}: cover and chapter title cards. They are added when you send the series to Print Sheets.` : 'The cover and chapter cards already exist.')));
-els.tidy.addEventListener('click', () => seriesAction('Tidying captions and names', 'tidy', {}, (r) => (r.changed ? `Tidied ${plural(r.changed, 'line')}. Cards that already have pictures need redrawing to show the new words.` : 'Nothing needed changing.')));
+els.tidy.addEventListener('click', () => seriesAction('Tidying captions and names', 'tidy', {}, (r) => (r.changed ? `Tidied ${plural(r.changed, 'line')}.${staleCards().length ? ` ${plural(staleCards().length, 'finished picture')} now show${staleCards().length === 1 ? 's' : ''} the old words: they are marked “changed” and can be redrawn together with the button above.` : ''}` : 'Nothing needed changing.')));
+els.makeBacks.addEventListener('click', () => seriesAction('Typesetting the card backs', 'backs', {}, (r) => `${plural(r.backs, 'card back')} ready${r.made ? ` (${r.made} typeset now)` : ''}. Send to Print Sheets now makes a double-sided sheet with each back behind its card.`));
+els.checkBook.addEventListener('click', () => seriesAction('Looking at every finished picture together', 'continuity', {}, (r) => (r.continuity.issues.length ? `Whole-book check: ${plural(r.continuity.issues.length, 'thing')} to look at, listed under “Whole-book check”.` : 'Whole-book check: the pictures are consistent with each other.')));
+els.continuity.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fix-card]'); if (!b) return;
+  const issue = series.continuity?.issues.find((x) => x.id === b.dataset.issue), c = series.cards.find((x) => x.n === Number(b.dataset.fixCard));
+  if (!issue || !c) return;
+  run(`Redrawing card ${c.n} to match the rest of the book (about a minute)`, async () => {
+    await flush(); const r = await illustrate(c.id, { fixNotes: `Continuity with the other cards of this book — ${issue.subject}: ${issue.fixNote || issue.problem}` }); renderSeries();
+    setStatus(`Card ${c.n} redrawn.${r.check && !r.check.pass ? ' The proofreader flags something on the new version — see ⚠ on the card.' : ''} Run the whole-book check again to confirm.`, r.check && !r.check.pass ? 'error' : 'ok');
+  });
+});
 els.redrawAll.addEventListener('click', () => {
   const n = series.cards.filter((c) => c.title).length, est = estimateImageCost(els.imgModel.value, els.imgSize.value, els.imgQuality.value);
   if (confirm(`Redraw all ${n} cards with the current picture settings${est ? ` (≈ ${fmtCost(est * n)})` : ''}? The pictures you have now are kept as earlier versions of each card.`)) illustrateAll(true);
@@ -569,7 +627,7 @@ async function illustrateAll(all = false) {
   stopRequested = false; els.stop.hidden = false; els.stop.disabled = false;
   await run('Illustrating', async (onProgress) => {
     await flush();
-    const todo = all === true ? series.cards.filter((c) => c.title) : unpictured(); let done = 0, spent = 0, flagged = 0;
+    const todo = Array.isArray(all) ? all : all === true ? series.cards.filter((c) => c.title) : unpictured(); let done = 0, spent = 0, flagged = 0;
     for (const c of todo) {
       if (stopRequested) break;
       onProgress({ phase: `Illustrating${els.proof.checked ? ' and proofreading' : ''} card ${c.n} of ${series.cards.length} (about a minute each)`, done, total: todo.length, snippet: c.title });
@@ -596,11 +654,13 @@ async function upscaleAll() {
 els.upscale.addEventListener('click', upscaleAll);
 async function sendToSheets() {
   await flush();
-  const order = [series.cover?.imageId]; let ch = '';
-  for (const c of series.cards) { if (c.chapter && c.chapter !== ch) { ch = c.chapter; order.push(series.chapterCards?.[ch]); } order.push(c.imageId); }
-  const items = order.filter(Boolean).map((id) => upscaledOf(id) || records.get(id)).filter((r) => r && !r.deletedAt).map((r) => ({ source: 'output', rel: r.file, copies: 1, back: null }));
+  // Each piece: [picture id, key of its typeset back]. Chapter title cards have no back and print blank behind.
+  const order = [[series.cover?.imageId, 'cover']]; let ch = '';
+  for (const c of series.cards) { if (c.chapter && c.chapter !== ch) { ch = c.chapter; order.push([series.chapterCards?.[ch], null]); } order.push([c.imageId, c.id]); }
+  const backOf = (key) => (key && series.backs?.[key] ? { source: 'output', rel: series.backs[key].rel } : null);
+  const items = order.filter(([id]) => id).map(([id, key]) => [upscaledOf(id) || records.get(id), key]).filter(([r]) => r && !r.deletedAt).map(([r, key]) => ({ source: 'output', rel: r.file, copies: 1, back: backOf(key) }));
   if (!items.length) return setStatus('Illustrate at least one card first.', 'error');
-  const spec = { ...config.sheets.defaults, page: 'tabloid', orientation: 'portrait', grid: '2x2', items };
+  const spec = { ...config.sheets.defaults, page: 'tabloid', orientation: 'portrait', grid: '2x2', items, ...(items.some((x) => x.back) ? { duplex: true, flip: 'long' } : {}) };
   try {
     const sheet = await api('POST', '/api/sheets', { name: series.title || 'Flash cards', spec });
     localStorage.setItem('dadventures.sheetDraft', JSON.stringify({ sheetId: sheet.id, name: sheet.name, spec: sheet.spec }));
@@ -612,8 +672,12 @@ async function sendToSheets() {
 function renderSeries() {
   refreshFlow();
   syncUrl();
-  els.seriesEmpty.hidden = Boolean(series?.cards.length); els.series.hidden = !series?.cards.length;
+  els.seriesEmpty.hidden = Boolean(series?.cards.length);
+  if (view === 'board' && !series?.cards.some((c) => c.title)) view = 'cards';
+  els.series.hidden = !series?.cards.length || view === 'board'; els.board.hidden = !series?.cards.length || view !== 'board';
   if (!series?.cards.length) return;
+  if (view === 'board') { for (const b of els.viewToggle.children) b.classList.toggle('on', b.dataset.view === view); return renderBoard(); }
+  renderContinuity(); renderAudio();
   els.title.value = series.title; els.logline.value = series.logline; els.styleGuide.value = series.styleGuide;
   els.storyBox.hidden = series.brief.kind !== 'story';
   els.world.value = series.world || '';
@@ -628,6 +692,101 @@ function renderSeries() {
   renderCast(); renderCards();
 }
 for (const [el, k] of [[els.title, 'title'], [els.logline, 'logline'], [els.styleGuide, 'styleGuide'], [els.spine, 'spine'], [els.world, 'world'], [els.refrain, 'refrain'], [els.hiddenFriend, 'hiddenFriend']]) el.addEventListener('input', () => queue({ [k]: el.value }));
+
+// Narration: what is recorded, what is out of date, and the download for a Yoto card.
+const audioUrl = (key) => { const a = series.audio?.tracks?.[key]; return a ? `/output/cards/audio/${series.id}/${encodeURIComponent(a.file)}` : ''; };
+function renderAudio() {
+  const a = series.audio, written = series.cards.filter((c) => c.title).length;
+  els.voice.value = voicePick || a?.voice || 'coral';
+  const stale = a ? (a.stale || []).length : 0, have = a ? Object.keys(a.tracks).length : 0, secs = a ? Object.values(a.tracks).reduce((n, t) => n + (t.seconds || 0), 0) : 0;
+  els.narrate.disabled = busy || !written;
+  els.narrate.textContent = !a ? '🔊 Record the narration' : stale || els.voice.value !== a.voice ? `🔊 Record ${els.voice.value !== a.voice ? 'again in this voice' : plural(stale, 'changed track')}` : '🔊 Narration is up to date';
+  els.audioZip.hidden = !have; els.audioZip.href = `/api/cards/series/${series.id}/audio.zip`;
+  els.audioState.textContent = !a ? (written ? `About ${fmtCost(series.cards.reduce((n, c) => n + words(c.narration), 0) / 150 * 0.015)} for the whole story.` : 'Write the cards first.') : `${plural(have, 'track')}, about ${Math.max(1, Math.round(secs / 60))} min, voice “${a.voice}”.${stale ? ` ${plural(stale, 'track')} out of date: the words changed since recording.` : ''}`;
+  els.introAudio.hidden = !audioUrl('intro'); if (audioUrl('intro') && !els.introAudio.src.endsWith(audioUrl('intro'))) els.introAudio.src = audioUrl('intro');
+}
+let voicePick = null;            // a voice chosen but not recorded yet
+els.voice.addEventListener('change', () => { voicePick = els.voice.value; if (series) renderAudio(); });
+els.narrate.addEventListener('click', () => run('Recording the narration', async (onProgress) => {
+  await flush();
+  const r = await streamApi(`/api/cards/series/${series.id}/narrate`, { voice: els.voice.value }, onProgress);
+  series = r.series; voicePick = null; renderSeries();
+  setStatus(r.recorded ? `Recorded ${plural(r.recorded, 'track')}${r.costUsd ? ` for about ${fmtCost(r.costUsd)}` : ''}. Play any card's track below, or download them all for a Yoto card.` : 'Every track already matches the text.', 'ok');
+}));
+
+function renderContinuity() {
+  const k = series.continuity, finals = series.cards.filter((c) => c.imageId && !c.draft);
+  if (!k) { els.continuity.innerHTML = `<span class="hint">${finals.length < 2 ? 'Available once two cards have final pictures.' : 'Not checked yet. The proofreader looks at one card at a time; this looks across all of them.'}</span>`; return; }
+  const changed = finals.filter((c) => k.checked?.[c.id] !== c.imageId).length;
+  els.continuity.innerHTML = `<span class="hint">${escapeHtml(k.summary || '')} Checked ${plural(Object.keys(k.checked || {}).length, 'picture')}${changed ? ` · <b>${plural(changed, 'picture')} changed since — check again</b>` : ''}.</span>` + (k.issues.length ? k.issues.map((x) => `<div class="issue ${x.severity}"><b>${escapeHtml(x.subject)}</b> <span class="hint">${x.severity === 'major' ? 'noticeable' : 'small'} · card${x.cards.length === 1 ? '' : 's'} ${x.cards.join(', ')}</span><div>${escapeHtml(x.problem)}</div>
+    <div class="row">${x.cards.map((n) => { const c = series.cards.find((y) => y.n === n); return c ? `<button class="mini" type="button" data-issue="${x.id}" data-fix-card="${n}"${k.checked?.[c.id] !== c.imageId ? ' disabled title="Already redrawn since the check"' : ''}>${k.checked?.[c.id] !== c.imageId ? `Card ${n} redrawn ✓` : `Redraw card ${n} to match`}</button>` : ''; }).join('')}</div></div>`).join('') : '<span class="proof ok">✓ Characters, objects and places stay the same from card to card.</span>');
+}
+
+// ---------- storyboard: every card at a glance, to approve before paying for final pictures ----------
+function renderBoard() {
+  const t = currentTemplate(), story = series.brief.kind === 'story', onCard = story && series.image.textMode === 'story';
+  els.boardGrid.innerHTML = series.cards.map((c) => {
+    const rec = records.get(c.imageId);
+    const caps = slotsFor(t, c).filter((x) => !story || x.role === 'story-panel').map((x) => c.slots.find((v) => v.key === x.key)?.heading).filter(Boolean);
+    const state = !c.title ? ['not written', ''] : !rec ? ['no sketch', ''] : c.draft ? [c.stale ? 'sketch out of date' : 'sketch', c.stale ? 'warn' : ''] : c.stale ? ['changed', 'warn'] : c.check && !c.check.pass ? ['⚠ flagged', 'warn'] : ['final', ''];
+    return `<div class="board-card" draggable="true" data-id="${c.id}">
+      <div class="b-art">${rec ? `<img loading="lazy" src="${escapeHtml(rec.thumbUrl || rec.url)}" alt="">` : escapeHtml(c.beat || c.topic || `Card ${c.n}`)}<span class="b-num">${c.n}</span><span class="b-state ${state[1]}">${state[0]}</span></div>
+      <div class="b-title">${escapeHtml(c.title || c.topic || 'Untitled')}</div>
+      ${onCard && c.storyText ? `<p class="b-text">${escapeHtml(c.storyText)}</p>` : caps.length ? `<ol>${caps.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ol>` : `<p class="b-text">${escapeHtml(c.beat || '')}</p>`}
+      <div class="b-row"><input placeholder="Change this card…" aria-label="Change card ${c.n}"><button class="mini" data-b="rewrite" type="button" title="Rewrite this card with that change, then sketch it again">✎</button></div>
+      <div class="b-row"><button class="mini" data-b="open" type="button" title="Open this card in the editor">Edit</button>${c.title && (!rec || c.draft) ? `<button class="mini" data-b="sketch" type="button" title="A quick low-quality sketch">${rec ? 'Re-sketch' : 'Sketch'}</button>` : ''}<span class="spacer"></span><button class="mini" data-b="cut" type="button" title="Cut this card from the story">✕</button></div>
+    </div>`;
+  }).join('');
+  const todo = unpictured(), est = estimateImageCost(els.imgModel.value, els.imgSize.value, els.imgQuality.value);
+  const sketches = series.cards.filter((c) => c.draft && records.get(c.imageId)), sketchCost = sketches.reduce((n, c) => n + (records.get(c.imageId).costUsd || 0), 0);
+  const missing = series.cards.filter((c) => c.title && !c.imageId).length, unwrit = unwritten().length;
+  const unpainted = todo.length ? (series.places || []).filter((pl) => !pl.imageId && series.cards.some((c) => c.place === pl.name)).length : 0;
+  const extra = (series.cover?.imageId ? 0 : 1) + new Set(series.cards.map((c) => c.chapter).filter((x) => x && !series.chapterCards?.[x])).size;
+  els.boardFoot.innerHTML = `<div class="cost">${todo.length
+    ? `Final pictures: <b>${plural(todo.length, 'card')}${est ? ` × ≈ ${fmtCost(est)} = ≈ ${fmtCost(est * todo.length)}` : ''}</b> at ${escapeHtml(els.imgQuality.value)} quality${est ? '' : ' (no price yet: nothing has been drawn at these settings)'}.${els.proof.checked ? ' Proofreading redraws the few that come out wrong, usually about a tenth more.' : ''}${est && extra ? ` Cover and chapter cards later: ≈ ${fmtCost(est * extra)}.` : ''}`
+    : 'Every card has its final picture.'}
+    <div class="hint">${sketches.length ? `${plural(sketches.length, 'sketch')} so far cost ${fmtCost(sketchCost)}.` : ''}${unpainted ? ` ${plural(unpainted, 'place')} in this story ${unpainted === 1 ? 'has' : 'have'} no reference painting yet.` : ''}${missing ? ` ${plural(missing, 'card')} not sketched yet.` : ''}${unwrit ? ` ${plural(unwrit, 'card')} not written yet.` : ''}</div></div>
+    ${unpainted ? `<button class="btn secondary" data-b="places" type="button"${busy ? ' disabled' : ''} title="Cards set in a place with a reference painting keep its landmarks from card to card">🏞 Paint ${plural(unpainted, 'place')} first</button>` : ''}
+    ${missing ? `<button class="btn secondary" data-b="sketch-all" type="button"${busy ? ' disabled' : ''}>✏️ Sketch ${plural(missing, 'card')}</button>` : ''}
+    ${todo.length ? `<button class="btn primary" data-b="approve" type="button"${busy || unwrit ? ' disabled' : ''}>Approve and draw ${plural(todo.length, 'final picture')}</button>` : '<button class="btn primary" data-b="done" type="button">Back to the cards</button>'}`;
+}
+els.boardFoot.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-b]')?.dataset.b;
+  if (b === 'approve') illustrateAll(); else if (b === 'sketch-all') draftAll(); else if (b === 'done') setView('cards'); else if (b === 'places') els.makePlaces.click();
+});
+els.boardGrid.addEventListener('click', async (e) => {
+  const el = e.target.closest('.board-card'), b = e.target.closest('[data-b]')?.dataset.b; if (!el || !b) return;
+  const c = series.cards.find((x) => x.id === el.dataset.id); if (!c) return;
+  if (b === 'open') { focusCard = String(c.n); setView('cards'); return goToCard(c.id); }
+  if (b === 'cut') {
+    if (!confirm(`Cut card ${c.n}${c.title ? ` “${c.title}”` : ''} from the story? Its pictures stay in History.`)) return;
+    await flush(); series = await api('PATCH', `/api/cards/series/${series.id}`, { removeCard: c.id }); return renderSeries();
+  }
+  if (b === 'sketch') return run(`Sketching card ${c.n}`, async () => { await flush(); await illustrate(c.id, { draft: true }); renderSeries(); setStatus(`Card ${c.n} sketched.`, 'ok'); });
+  if (b === 'rewrite') {
+    const text = el.querySelector('input').value.trim();
+    if (!text) return setStatus('Type what should change on this card first.', 'error');
+    const resketch = !c.imageId || c.draft;
+    await write([c.id], text);
+    if (resketch && series.cards.find((x) => x.id === c.id)?.title) await run(`Sketching card ${c.n} again`, async () => { await illustrate(c.id, { draft: true }); renderSeries(); setStatus(`Card ${c.n} rewritten and sketched again.`, 'ok'); });
+  }
+});
+els.boardGrid.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('.b-row input')) e.target.closest('.board-card').querySelector('[data-b=rewrite]').click(); });
+// Drag a card onto another to move it there.
+let dragId = null;
+els.boardGrid.addEventListener('dragstart', (e) => { const el = e.target.closest('.board-card'); if (!el || e.target.matches('input')) return; dragId = el.dataset.id; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); });
+els.boardGrid.addEventListener('dragend', () => { dragId = null; for (const el of els.boardGrid.querySelectorAll('.dragging, .over')) el.classList.remove('dragging', 'over'); });
+els.boardGrid.addEventListener('dragover', (e) => { const el = e.target.closest('.board-card'); if (!dragId || !el) return; e.preventDefault(); for (const o of els.boardGrid.querySelectorAll('.over')) if (o !== el) o.classList.remove('over'); if (el.dataset.id !== dragId) el.classList.add('over'); });
+els.boardGrid.addEventListener('drop', (e) => { const el = e.target.closest('.board-card'); if (!dragId || !el) return; e.preventDefault(); moveCardTo(dragId, el.dataset.id); });
+async function moveCardTo(id, beforeId) {
+  if (id === beforeId || busy) return;
+  const ids = series.cards.map((c) => c.id), from = ids.indexOf(id), to = ids.indexOf(beforeId);
+  if (from < 0 || to < 0) return;
+  ids.splice(from, 1); ids.splice(to, 0, id);   // lands in the slot of the card it was dropped on
+  await flush();
+  try { series = await api('PATCH', `/api/cards/series/${series.id}`, { orderCards: ids }); renderSeries(); setStatus(`Moved the card to position ${to + 1}. Read the neighbouring cards again: their words may need to change to fit.`, 'ok'); }
+  catch (err) { setStatus(escapeHtml(err.message), 'error'); }
+}
 
 function renderCast() {
   els.cast.innerHTML = series.cast.length ? '' : '<span class="hint">No recurring characters. Add one to keep a guide or hero on every card.</span>';
@@ -688,7 +847,8 @@ function renderCards() {
         ${c.imageIds.length > 1 ? `<div class="variants">${c.imageIds.map((id) => `<img class="${id === c.imageId ? 'on' : ''}" data-variant="${id}" src="${escapeHtml(recThumb(id))}" alt="">`).join('')}</div>` : ''}
         ${c.title ? `<button class="btn secondary small" data-act="image" type="button">${rec ? '↻ New version' : '🎨 Illustrate'}</button>` : ''}
         ${rec && c.draft ? '<span class="chip draft">Draft sketch</span>' : ''}
-        ${rec && !c.draft ? (c.check && c.check.imageId === c.imageId ? (c.check.pass ? `<span class="proof ok" title="${escapeHtml((c.check.notes || []).join(' · '))}">✓ Proofread: words and pictures match${(c.check.notes || []).length ? ` · ${c.check.notes.length} small note${c.check.notes.length === 1 ? '' : 's'}` : ''}</span>` : `<div class="proof bad">⚠ Proofreader:<ul>${c.check.issues.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul><button class="mini" data-act="fix" type="button">Redraw fixing these</button></div>`) : '<button class="mini" data-act="check" type="button">Proofread this card</button>') : ''}
+        ${rec && !c.draft ? (c.check && c.check.imageId === c.imageId ? (c.check.pass ? `<span class="proof ok" title="${escapeHtml((c.check.notes || []).join(' · '))}">✓ Proofread: words and pictures match${(c.check.notes || []).length ? ` · ${c.check.notes.length} small note${c.check.notes.length === 1 ? '' : 's'}` : ''}</span>` : `<div class="proof bad">⚠ Proofreader:<ul>${c.check.issues.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>${c.check.proposal ? proposalHtml(c.check.proposal) : '<button class="mini" data-act="fix" type="button">Redraw fixing these</button>'}</div>`) : '<button class="mini" data-act="check" type="button">Proofread this card</button>') : ''}
+        ${rec && c.stale ? staleHtml(c) : ''}
         ${rec ? `<span class="hint">${rec.costUsd ? fmtCost(rec.costUsd) : ''}</span>` : ''}</div>
       <div class="page-body">
         <div class="page-head"><b>Card ${c.n}</b>${c.chapter ? `<span class="chip">${escapeHtml(c.chapter)}</span>` : ''}<span class="spacer"></span><button class="mini" data-act="up" type="button">↑</button><button class="mini" data-act="down" type="button">↓</button><button class="mini" data-act="remove" type="button">✕</button></div>
@@ -698,13 +858,39 @@ function renderCards() {
           ${t?.heroHint || c.hero ? `<textarea data-k="hero" rows="2" placeholder="Main picture">${escapeHtml(c.hero)}</textarea>` : ''}
           ${slots}
           ${story ? `<label class="field"><span>Story on the card <span class="hint">printed under the pictures when “Story on the card” is chosen in Picture settings · ${words(c.storyText)} words</span></span><textarea data-k="storyText" rows="2">${escapeHtml(c.storyText || '')}</textarea></label>` : ''}
-          ${story ? `<label class="field narration"><span>Read aloud <span class="hint">the storyteller's text for this card (not printed on the front) · ${words(c.narration)} words</span></span><textarea data-k="narration" rows="4">${escapeHtml(c.narration || '')}</textarea></label>` : ''}
+          ${story ? `<label class="field narration"><span>Read aloud <span class="hint">the storyteller's text for this card (not printed on the front) · ${words(c.narration)} words</span></span><textarea data-k="narration" rows="4">${escapeHtml(c.narration || '')}</textarea>${audioUrl(c.id) ? `<audio controls preload="none" src="${escapeHtml(audioUrl(c.id))}"></audio>${(series.audio.stale || []).includes(c.id) ? '<span class="hint">This recording is out of date: the words changed.</span>' : ''}` : ''}</label>` : ''}
           <div class="card-titles"><textarea data-k="closing" rows="2" placeholder="Bottom line">${escapeHtml(c.closing)}</textarea><input data-k="source" value="${escapeHtml(c.source)}" placeholder="Source credit (optional)"></div>
           ${chips ? `<div class="p-chars">${chips}</div>` : ''}` : ''}
         <div class="rewrite"><input class="rw-input" placeholder="${c.title ? 'Rewrite: “shorter”, “add a counting fact”, “make panel 2 funnier”…' : 'Optional instructions for the writer'}"><button class="rw-chip rw-go" data-act="write" type="button">${c.title ? '✎ Rewrite' : '✎ Write this card'}</button></div>
         ${c.title ? '<details class="brief"><summary>Show the picture prompt</summary><pre class="p-prompt-text">Loading…</pre></details>' : ''}
       </div></div>`;
   }).join('');
+}
+// The card's text was edited after its picture was drawn: say what differs and offer the redraw.
+function staleHtml(c) {
+  const st = c.stale, lines = [];
+  for (const w of st.words.slice(0, 4)) lines.push(`<li>now: “${escapeHtml(w)}”</li>`);
+  for (const w of st.was.slice(0, 4)) lines.push(`<li>on the picture: <span class="was">“${escapeHtml(w)}”</span></li>`);
+  if (st.words.length + st.was.length > 8) lines.push('<li>…and more</li>');
+  if (st.picture) lines.push('<li>the picture description changed</li>');
+  return `<div class="proof bad stale"><b>✎ ${st.words.length || st.was.length ? 'Words changed' : 'Script changed'} since this ${c.draft ? 'sketch' : 'picture'}</b><ul>${lines.join('')}</ul><button class="mini" data-act="${c.draft ? 'sketch' : 'image'}" type="button">${c.draft ? 'Sketch again' : 'Redraw with the new text'}</button></div>`;
+}
+// The proofreader's complaint traced to the script: the corrected picture description, to accept or dismiss.
+function proposalHtml(p) {
+  return `<div class="proposal"><p><b>The script is the cause, so redrawing alone will not fix it.</b> ${escapeHtml(p.explanation)}</p>
+    ${p.panels.map((x) => `<div><span class="hint">${escapeHtml(x.label)} — proposed picture description:</span><div class="to" title="Now: ${escapeHtml(x.from || '(empty)')}">${escapeHtml(x.to)}</div></div>`).join('')}
+    ${p.hero ? `<div><span class="hint">Main picture — proposed:</span><div class="to" title="Now: ${escapeHtml(p.hero.from)}">${escapeHtml(p.hero.to)}</div></div>` : ''}
+    ${p.addCharacters.length ? `<p>Add to this card: ${escapeHtml(p.addCharacters.join(', '))}</p>` : ''}
+    <div class="row"><button class="mini" data-act="accept-fix" type="button">Accept and redraw</button><button class="mini" data-act="accept-only" type="button">Accept, redraw later</button><button class="mini" data-act="dismiss-fix" type="button">Dismiss</button></div></div>`;
+}
+// After a save, show or clear each card's "changed" note in place (a full re-render would steal the typing focus).
+function syncStaleChips() {
+  if (!series || view === 'board') return;
+  for (const el of els.cards.querySelectorAll('.page-card')) {
+    const c = series.cards.find((x) => x.id === el.dataset.id), art = el.querySelector('.page-art');
+    art.querySelector('.proof.stale')?.remove();
+    if (c?.stale && records.get(c.imageId)) art.insertAdjacentHTML('beforeend', staleHtml(c));
+  }
 }
 const variantOf = (t, c) => (t?.variants?.length ? t.variants.find((v) => v.id === c.layout) || t.variants[0] : null);
 const slotsFor = (t, c) => { const v = variantOf(t, c); return v ? [...v.slots, ...t.slots] : t?.slots || []; };
@@ -730,6 +916,14 @@ els.cards.addEventListener('click', async (e) => {
   if (act === 'image' || act === 'fix') return run(`Illustrating card ${c.n} (about a minute)`, async () => {
     await flush(); const r = await illustrate(c.id, act === 'fix' ? { fixNotes: c.check?.fixNotes || '' } : {}); renderSeries();
     setStatus(`Card ${c.n} illustrated.${r.check ? (r.check.pass ? ' The proofreader passed it.' : ' The proofreader still flags something — see ⚠ on the card.') : ''}`, r.check && !r.check.pass ? 'error' : 'ok');
+  });
+  if (act === 'sketch') return run(`Sketching card ${c.n}`, async () => { await flush(); await illustrate(c.id, { draft: true }); renderSeries(); setStatus(`Card ${c.n} sketched.`, 'ok'); });
+  if (act === 'accept-fix' || act === 'accept-only' || act === 'dismiss-fix') return run(act === 'accept-fix' ? `Correcting the script and redrawing card ${c.n} (about a minute)` : 'Saving', async () => {
+    await flush();
+    series = await api('POST', `/api/cards/series/${series.id}/cards/${c.id}/fix`, { dismiss: act === 'dismiss-fix' });
+    if (act !== 'accept-fix') { renderSeries(); return setStatus(act === 'dismiss-fix' ? 'Proposal dismissed; the script is unchanged.' : `Card ${c.n}: picture description corrected. The card is marked as changed until it is redrawn.`, 'ok'); }
+    const r = await illustrate(c.id); renderSeries();
+    setStatus(`Card ${c.n}: script corrected and redrawn.${r.check ? (r.check.pass ? ' The proofreader passed it.' : ' The proofreader still flags something — see ⚠ on the card.') : ''}`, r.check && !r.check.pass ? 'error' : 'ok');
   });
   if (act === 'check') return run(`Proofreading card ${c.n}`, async () => { await flush(); const r = await api('POST', `/api/cards/series/${series.id}/cards/${c.id}/check`, {}); series = r.series; renderSeries(); setStatus(r.check.pass ? `Card ${c.n}: words and pictures match the script.` : `Card ${c.n}: ${r.check.issues.length} thing${r.check.issues.length === 1 ? '' : 's'} flagged.`, r.check.pass ? 'ok' : 'error'); });
   if (act === 'up' || act === 'down' || act === 'remove') {
@@ -769,6 +963,7 @@ document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.
     config = await api('GET', '/api/config');
     els.topbar.textContent = config.hasApiKey ? `Cards read by ${config.cards.visionModel} · written by ${config.cards.model}` : '⚠ Add your OpenAI key to .env, then restart';
     fillSelect(els.audience, config.cards.audiences, 'template');
+    fillSelect(els.voice, (config.cards.voices || ['coral']).map((v) => ({ id: v, label: v })), 'coral');
     fillSelect(els.imgModel, config.imageModels, config.defaultImageModel);
     fillSelect(els.imgQuality, config.qualities, 'high');
     fillSelect(els.imgSize, [{ id: '1024x1536', label: '1024 × 1536 — 2:3 portrait (upscale ×4 for print)' }, { id: '2048x3072', label: '2048 × 3072 — 2:3 portrait, 2K' }, { id: '1536x1024', label: '1536 × 1024 — 3:2 landscape' }, { id: '1024x1024', label: '1024 × 1024 — square' }], '1024x1536');
