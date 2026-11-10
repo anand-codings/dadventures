@@ -1005,7 +1005,7 @@ export function createCards(deps) {
       // With several panels the friend tends to be drawn in each: name the one panel it belongs in (it moves from card to card).
       const pics = slotsFor(L, card).filter((x) => x.role === 'story-panel' && byKey.get(x.key)?.visual);
       const home = pics.length > 1 ? pics[(card.n - 1) % pics.length].label : '';
-      lines.push('', `Hidden friend: ${s.hiddenFriend}. Draw it exactly once on the whole card, small (about the size of a thumbnail), ${home ? `in ${home} only — in no other panel and in no box or ribbon —` : 'tucked somewhere inside the picture'} where a child can spot it; never over text.`);
+      lines.push('', `Hidden friend: ${s.hiddenFriend.replace(/[.\s]+$/, '')}. Draw it exactly once on the whole card, small (about the size of a thumbnail), ${home ? `in ${home} only — in no other panel and in no box or ribbon —` : 'tucked somewhere inside the picture'} where a child can spot it; never over text.`);
     }
     lines.push('', `Style (${varied ? 'the same rendering, lettering shapes and character designs on every card of the series; only the colours and layout change from card to card' : 'identical on every card of the series'}): ${styleOf(s, t)}`);
     if (s.brief.kind === 'story') lines.push('', varied
@@ -1365,7 +1365,7 @@ Leave text that already follows the rules exactly as it is.`,
     if (s.places.some((pl) => pl.fixtures === undefined)) {
       const { parsed } = await llmJson({ name: 'card_place_fixtures', model: CARD_MODEL, effort: 'low', log: { type: 'card_places', seriesId: id },
         schema: obj({ places: { type: 'array', items: obj({ name: str('exactly as given'), fixtures: str() }) } }),
-        instructions: 'For each place of this card story, write "fixtures": the objects in that place that the plot depends on, in the exact state they are in when the story FIRST arrives there, with position and size (for example "a loose stone wedged across the low entrance of the hollow, covering all but a gap one hand high"). One or two sentences; no characters; "" when the plot depends on no object there. Take the facts from the story; do not invent objects.',
+        instructions: 'For each place of this card story, write "fixtures": the objects in that place that the plot depends on, in the exact state they are in when the story FIRST arrives there, with position and size (for example "a loose stone wedged across the low entrance of the hollow, covering all but a gap one hand high"). Name only the object or objects — do not describe the place again — and say exactly where each sits and how much it covers or blocks as a fraction or a hand-width, choosing the reading that makes the story problem real (an entrance the hero cannot get through is covered almost completely). One sentence per object; no characters; "" when the plot depends on no object there. Take the facts from the story; do not invent objects.',
         input: `${storyDigest(s, t.layout)}\n\nReturn places: ${s.places.map((pl) => pl.name).join('; ')}` }).catch(() => ({ parsed: { places: [] } }));
       s = await withSeries(id, (x) => { for (const pl of x.places) if (pl.fixtures === undefined) pl.fixtures = clampStr((parsed.places || []).find((o) => o.name === pl.name)?.fixtures, 400); return x; });
     }
