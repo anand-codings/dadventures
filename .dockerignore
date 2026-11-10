@@ -1,0 +1,7 @@
+# Hidden files and folders (.env, .git, editor and tool folders)
+.*
+output/
+media/
+node_modules/
+*.md
+LICENSE

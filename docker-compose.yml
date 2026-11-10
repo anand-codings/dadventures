@@ -1,0 +1,15 @@
+services:
+  studio:
+    build: .
+    container_name: dadventures
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 53405
+      OUTPUT_DIR: /app/output
+    ports:
+      - "127.0.0.1:53405:53405"
+    volumes:
+      - ./output:/app/output
+      - ./media:/app/media
+    restart: unless-stopped

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Print Sheets — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%231f8f5f%27/%3E%3Crect x=%2712%27 y=%2712%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2734%27 y=%2712%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2712%27 y=%2734%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2734%27 y=%2734%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="sheets">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a class="on" href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <div class="library-row">
+        <select id="sheet-select"><option value="">Open a saved sheet…</option></select>
+        <button id="new-sheet" class="btn secondary small" type="button">+ New</button>
+        <button id="delete-sheet" class="btn secondary small" type="button" title="Delete this saved sheet (its PDF is removed; source images are untouched)">✕</button>
+      </div>
+      <label class="field"><span>Sheet name</span><input id="name" type="text" placeholder="Ocean animals — 6 up"></label>
+
+      <details class="box" open>
+        <summary>Page</summary>
+        <div class="grid2">
+          <label class="field"><span>Paper size</span><select id="page"></select></label>
+          <label class="field"><span>Orientation</span><select id="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+        </div>
+        <div class="grid2" id="custom-size" hidden>
+          <label class="field"><span>Width (in)</span><input id="custom-width" type="number" min="2" max="60" step="0.25" value="8.5"></label>
+          <label class="field"><span>Height (in)</span><input id="custom-height" type="number" min="2" max="60" step="0.25" value="11"></label>
+        </div>
+        <div class="size-note" id="page-note"></div>
+      </details>
+
+      <details class="box" open>
+        <summary>Arrangement</summary>
+        <label class="field"><span>Images per page</span><select id="grid"></select></label>
+        <div class="grid2" id="custom-grid" hidden>
+          <label class="field"><span>Columns</span><input id="cols" type="number" min="1" max="12" value="2"></label>
+          <label class="field"><span>Rows</span><input id="rows" type="number" min="1" max="12" value="2"></label>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>Printer margin (in)</span><input id="margin" type="number" min="0" max="3" step="0.125" value="0.25"></label>
+          <label class="field"><span>Gap between pieces (in)</span><input id="gutter" type="number" min="0" max="4" step="0.125" value="0.5"></label>
+        </div>
+        <div class="size-note">Laminating: keep the gap at ¼–½ in so every piece keeps a sealed border. Cutting on a guillotine without laminating: set the gap to 0 so each cut line is shared, and a margin of ⅜ in so the crop marks at the page edges print (printers cannot print the outer ~0.2 in).</div>
+        <div class="grid2">
+          <label class="field"><span>Fit</span><select id="fit"><option value="contain">Whole image (no cropping)</option><option value="cover">Fill the cell (crop edges)</option></select></label>
+          <label class="field"><span>Image detail</span><select id="max-dpi"><option value="300">300 DPI (print quality)</option><option value="400" selected>400 DPI</option><option value="600">600 DPI (large file)</option><option value="1200">Full resolution</option></select></label>
+        </div>
+        <label class="field"><span>File size</span><select id="encode"><option value="jpeg" selected>Smaller file — JPEG at quality 92 (recommended for uploads)</option><option value="png">Lossless PNG — about 10× larger files</option></select></label>
+        <div class="check-list">
+          <label><input type="checkbox" id="pack"> Pack pieces edge to edge (cells take the pieces' shape; with a 0 gap every cut line is shared)</label>
+          <label><input type="checkbox" id="cut-marks" checked> Crop marks (in the gaps and at the page edges, on every cut line)</label>
+          <label><input type="checkbox" id="outline"> Hairline border around each image (prints on the piece)</label>
+          <label><input type="checkbox" id="label"> Print the sheet name in the bottom margin</label>
+        </div>
+      </details>
+
+      <details class="box" open>
+        <summary>Double-sided</summary>
+        <div class="check-list">
+          <label><input type="checkbox" id="duplex"> Print on both sides (front image + back image per piece)</label>
+        </div>
+        <div id="duplex-options" hidden>
+          <label class="field"><span>Printer flips the sheet on the</span><select id="flip"><option value="long">Long edge (book-style — the FedEx default)</option><option value="short">Short edge (calendar-style)</option></select></label>
+          <label class="field"><span>Back with a different shape</span><select id="back-fit"><option value="contain">Whole image, white bars inside the front's outline</option><option value="cover">Fill the front's outline, crop the edges</option></select></label>
+          <div class="size-note">Each front page is followed by a mirrored back page, so every back lands exactly behind its front. Give each piece a back by dropping an image on its <b>back</b> box (or on the back page in the preview). Pieces without a back print blank on the reverse. Ask for “double-sided, flip on the long edge”.</div>
+        </div>
+      </details>
+
+      <div class="summary" id="summary"></div>
+      <div class="warnings" id="warnings" hidden></div>
+
+      <button class="btn primary" id="build" type="button">⬇ Build PDF</button>
+      <div class="status" id="status"></div>
+      <div class="render" id="render" hidden></div>
+    </section>
+
+    <section class="panel results">
+      <div class="gallery-head">
+        <div class="toolbar">
+          <h2 class="gallery-title">Preview</h2>
+          <span class="hint" id="preview-meta"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="clear" type="button">Clear sheet</button>
+        </div>
+      </div>
+      <div class="preview-pages" id="preview"></div>
+
+      <div class="gallery-head">
+        <div class="toolbar">
+          <h2 class="gallery-title">On the sheet</h2>
+          <span class="hint" id="items-meta"></span>
+          <span class="spacer"></span>
+          <div class="all-back" id="all-back" hidden title="Drop an image here to use it as the back of every piece">Drop an image here → same back for all</div>
+        </div>
+      </div>
+      <div class="sheet-items" id="items"></div>
+
+      <div class="gallery-head">
+        <div class="toolbar">
+          <h2 class="gallery-title">Pick images</h2>
+          <input id="search" type="search" placeholder="Filter by name or folder…">
+          <select id="source-filter"><option value="">All folders</option></select>
+          <button class="btn small" id="refresh" type="button" title="Rescan the folders">↻</button>
+        </div>
+        <div class="hint" id="picker-hint"></div>
+      </div>
+      <div id="picker"></div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script type="module" src="/sheets.js"></script>
+</body>
+</html>

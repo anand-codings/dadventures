@@ -1,0 +1,14 @@
+{
+  "name": "dadventures",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local web app for illustrated story books, flash cards and print sheets, using OpenAI image models",
+  "license": "MIT",
+  "author": "Anand B",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "for f in src/*.js public/*.js; do node --check \"$f\" || exit 1; done"
+  }
+}

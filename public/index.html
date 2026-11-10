@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%236c8cff%27/%3E%3Ccircle cx=%2724%27 cy=%2724%27 r=%278%27 fill=%27%23fff%27/%3E%3Cpath d=%27M8 52l16-18 10 12 8-8 14 14z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a class="on" href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <div class="library-row">
+        <select id="library"><option value="">Load saved prompt…</option></select>
+        <button id="save-prompt" class="btn secondary small" type="button" title="Save the current prompt (and enhanced version) to the library">Save</button>
+        <button id="delete-prompt" class="btn secondary small" type="button" title="Delete the selected saved prompt">✕</button>
+      </div>
+
+      <label class="field">
+        <span class="label-row"><span>Prompt</span><span class="hint">⌘/Ctrl + Enter to generate · drafts auto-save</span></span>
+        <textarea id="prompt" rows="6" placeholder="Describe the image you want. Example: A friendly cartoon polar bear family on arctic ice, bold flat colors, kids' educational poster with the title &quot;Life in the Arctic&quot; at the top."></textarea>
+      </label>
+
+      <div class="enhance-row">
+        <input id="notes" type="text" placeholder="Optional enhancement guidance (e.g. kids' poster style, bold flat colors, big readable title)">
+        <button id="enhance" class="btn secondary" type="button">✨ Enhance</button>
+      </div>
+
+      <div class="field" id="enhanced-wrap" hidden>
+        <span class="label-row">
+          <span>Enhanced prompt <span class="hint">(editable — original is kept)</span></span>
+          <span class="hint" id="enhance-meta"></span>
+        </span>
+        <textarea id="enhanced" rows="7"></textarea>
+        <div class="radio-row">
+          <label><input type="radio" name="use" value="enhanced" id="use-enhanced" checked> Generate with enhanced</label>
+          <label><input type="radio" name="use" value="original" id="use-original"> Generate with original</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label-row"><span>Characters <span class="hint">(reference images keep them consistent)</span></span><button class="link" id="new-character" type="button">+ new character</button></span>
+        <div class="char-chips" id="char-chips"><span class="hint">No characters yet. Save one from any generated image, or create one from your own reference photos.</span></div>
+        <details class="block-preview" id="block-preview" hidden>
+          <summary>Character instructions that will be appended to the prompt <span class="hint" id="block-meta"></span></summary>
+          <pre id="block-text"></pre>
+        </details>
+      </div>
+      <div class="char-editor" id="char-editor" hidden>
+        <div class="grid2">
+          <label class="field"><span>Name</span><input id="char-name" type="text" placeholder="e.g. Ollie the octopus"></label>
+          <label class="field"><span>Reference images</span><input id="char-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+        </div>
+        <div class="ref-grid" id="char-refs"></div>
+        <div class="hint">Best references: a clean front or three-quarter view, face visible, plain background, no text. One good identity image plus a reference sheet beats many busy scenes. The first image is the primary anchor.</div>
+        <div class="actions">
+          <button class="btn secondary small" id="char-describe" type="button" title="Use a vision model to fill the identity fields from the reference images">✨ Auto-describe from references</button>
+          <button class="btn secondary small" id="char-sheet" type="button" hidden title="Draws a clean turnaround sheet (added as a reference) and a detailed character bible: profile, annotated portrait, design breakdown, expressions, palette and on-model rules (two paid pictures, ≈ $0.20–0.35)">🧍 Generate character sheets</button>
+        </div>
+        <label class="field"><span>Appearance <span class="hint">(face, body shape, proportions, colors, markings)</span></span><textarea id="char-desc" rows="2" placeholder="Small lavender dumbo octopus with a round head, big blue eyes, pink ear-fins and eight short frilly tentacles"></textarea></label>
+        <div class="grid2">
+          <label class="field"><span>Outfit &amp; accessories</span><input id="char-outfit" type="text" placeholder="none"></label>
+          <label class="field"><span>Color palette</span><input id="char-palette" type="text" placeholder="lavender body, pink fins, navy eyes"></label>
+          <label class="field"><span>Art style</span><input id="char-style" type="text" placeholder="flat vector cartoon, soft gradients"></label>
+          <label class="field"><span>Personality / tone</span><input id="char-personality" type="text" placeholder="cheerful, curious, gentle"></label>
+        </div>
+        <div class="actions">
+          <button class="btn primary small" id="char-save" type="button">Save character</button>
+          <button class="btn secondary small" id="char-cancel" type="button">Close</button>
+          <button class="btn danger small" id="char-delete" type="button" hidden>Delete character</button>
+        </div>
+        <div class="status" id="char-status"></div>
+      </div>
+
+      <div class="grid2">
+        <label class="field"><span>Model</span><select id="model"></select></label>
+        <label class="field"><span>Quality</span><select id="quality"></select></label>
+        <label class="field"><span>Size</span><select id="preset"></select></label>
+        <div class="field" id="custom-size" hidden>
+          <span>Custom (multiples of 16)</span>
+          <div class="wh">
+            <input id="width" type="number" min="640" max="3840" step="16" placeholder="W">
+            <span>×</span>
+            <input id="height" type="number" min="640" max="3840" step="16" placeholder="H">
+          </div>
+        </div>
+        <label class="field"><span>Format</span><select id="format"></select></label>
+        <label class="field"><span>Background</span><select id="background"></select></label>
+        <label class="field"><span>Images per run</span><input id="count" type="number" min="1" max="4" value="1"></label>
+        <label class="field"><span>Tags for new images</span><input id="gen-tags" type="text" placeholder="e.g. ocean, poster"></label>
+      </div>
+      <div class="size-note" id="size-note"></div>
+
+      <div class="based-on" id="based-on" hidden>
+        <span>Linked to: <b id="based-on-title"></b></span>
+        <button class="link" id="based-on-clear" type="button">unlink</button>
+      </div>
+
+      <button id="generate" class="btn primary" type="button">Generate</button>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="panel results">
+      <div class="result" id="result">
+        <div class="empty" id="empty">Generated images appear here. Every run saves the image, the original prompt, and the enhanced prompt to the output folder.</div>
+        <figure id="figure" hidden>
+          <div class="image-col">
+            <a id="result-link" target="_blank" rel="noopener"><img id="result-img" alt="Generated image"></a>
+            <div class="missing-banner" id="missing-banner" hidden>⚠ The image file is missing on disk. The prompts and settings are still preserved here.</div>
+            <div class="related" id="related" hidden>
+              <div class="prompt-title">Related images</div>
+              <div class="related-row" id="related-row"></div>
+            </div>
+          </div>
+          <figcaption>
+            <div class="title-row">
+              <span class="kind-badge" id="kind-badge" hidden></span>
+              <input id="edit-title" type="text" placeholder="Untitled — add a title">
+              <button class="btn icon" id="fav" type="button" title="Toggle favorite">☆</button>
+            </div>
+            <div class="meta-row" id="result-meta"></div>
+            <div class="prompt-block">
+              <div class="prompt-title">Prompt used <button class="link" id="copy-used" type="button">copy</button></div>
+              <div class="prompt-text" id="result-prompt"></div>
+            </div>
+            <div class="prompt-block" id="result-original-block" hidden>
+              <div class="prompt-title">Original prompt <button class="link" id="copy-original" type="button">copy</button></div>
+              <div class="prompt-text" id="result-original"></div>
+            </div>
+            <div class="prompt-block" id="result-enhance-notes-block" hidden>
+              <div class="prompt-title">Enhancement guidance</div>
+              <div class="prompt-text" id="result-enhance-notes"></div>
+            </div>
+            <div class="upscale-box" id="upscale-box" hidden>
+              <div class="prompt-title">Upscale <span class="hint" id="upscale-note"></span></div>
+              <div class="upscale-row">
+                <select id="upscale-model"></select>
+                <select id="upscale-scale"></select>
+                <button class="btn primary small" id="upscale" type="button">⬆ Upscale</button>
+              </div>
+              <div class="status" id="upscale-status"></div>
+            </div>
+            <div class="field">
+              <span>Use as character reference</span>
+              <select id="add-to-char"><option value="">Add this image to a character…</option><option value="__new__">New character from this image…</option></select>
+            </div>
+            <label class="field"><span>Tags</span><input id="edit-tags" type="text" placeholder="comma, separated"></label>
+            <label class="field"><span>Notes</span><textarea id="edit-notes" rows="3" placeholder="Print notes, what worked, what to change next…"></textarea></label>
+            <div class="actions">
+              <button class="btn secondary" id="save-details" type="button">Save details</button>
+              <button class="btn secondary" id="reuse" type="button">↩ Reuse &amp; link</button>
+              <a class="btn secondary" id="download" download>⬇ Download</a>
+              <button class="btn secondary" id="reveal" type="button">Reveal in Finder</button>
+              <button class="btn danger" id="delete" type="button">Move to trash</button>
+              <button class="btn secondary" id="restore" type="button" hidden>Restore</button>
+              <button class="btn danger" id="purge" type="button" hidden>Delete permanently</button>
+            </div>
+            <div class="status" id="detail-status"></div>
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="gallery-head">
+        <h2 class="gallery-title">History <span class="hint" id="history-count"></span></h2>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Search prompts, titles, tags…">
+          <select id="filter-model"><option value="">All models</option></select>
+          <select id="filter-size"><option value="">All sizes</option></select>
+          <select id="sort">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="cost">Highest cost</option>
+            <option value="title">Title A–Z</option>
+          </select>
+          <button class="btn secondary small toggle" id="filter-fav" type="button">★ Favorites</button>
+          <button class="btn secondary small toggle" id="filter-upscaled" type="button">⬆ Upscaled</button>
+          <button class="btn secondary small toggle" id="view-trash" type="button">🗑 Trash</button>
+          <span class="spacer"></span>
+          <a class="btn secondary small" href="/api/history/export.csv" download>Export CSV</a>
+          <a class="btn secondary small" href="/api/history/export.json" download>Export JSON</a>
+          <button class="btn secondary small" id="reindex" type="button" title="Rebuild history from the per-image JSON sidecars and regenerate thumbnails">Reindex</button>
+        </div>
+      </div>
+      <div class="gallery" id="gallery"></div>
+      <div class="empty small" id="gallery-empty" hidden>Nothing matches.</div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

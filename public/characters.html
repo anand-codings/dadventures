@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Characters — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%237c5cff%27/%3E%3Ccircle cx=%2732%27 cy=%2725%27 r=%2711%27 fill=%27%23fff%27/%3E%3Cpath d=%27M12 56c2-13 10-19 20-19s18 6 20 19z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="characters">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a class="on" href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="chars-page">
+    <!-- Everyone -->
+    <section id="cast-view">
+      <div class="toolbar">
+        <h2 class="gallery-title">Our characters <span class="hint" id="cast-count"></span></h2>
+        <span class="spacer"></span>
+        <input id="search" type="search" placeholder="Search by name, look or personality…">
+        <a class="btn primary small" href="/?character=new">+ New character</a>
+      </div>
+      <div class="cast" id="cast"></div>
+      <div class="empty" id="cast-empty" hidden></div>
+    </section>
+
+    <!-- One character -->
+    <section id="one-view" hidden>
+      <div class="toolbar">
+        <button class="btn secondary small" id="back" type="button">← All characters</button>
+        <div class="char-chips" id="switcher"></div>
+      </div>
+      <div class="one">
+        <div class="panel viewer">
+          <a id="big-link" target="_blank" rel="noopener" title="Open full size"><img id="big" alt=""></a>
+          <div class="viewer-cap"><b id="big-label"></b><span class="hint" id="big-hint"></span></div>
+          <div class="strip" id="strip"></div>
+        </div>
+        <div class="panel profile" id="profile"></div>
+      </div>
+      <div class="panel" id="pictures-panel">
+        <div class="prompt-title"><span id="pictures-title"></span></div>
+        <div class="gallery" id="pictures"></div>
+        <div class="empty small" id="pictures-empty" hidden></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script src="/characters.js"></script>
+</body>
+</html>

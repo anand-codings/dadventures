@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Costs — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%237c5cff%27/%3E%3Ctext x=%2732%27 y=%2746%27 font-size=%2740%27 font-family=%27sans-serif%27 font-weight=%27700%27 text-anchor=%27middle%27 fill=%27%23fff%27%3E$%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/costs.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="costs">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a class="on" href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="costs-page">
+    <div class="cost-filters" id="filters">
+      <div class="seg" id="range" role="group" aria-label="Date range">
+        <button type="button" data-range="today">Today</button>
+        <button type="button" data-range="7d">7 days</button>
+        <button type="button" data-range="30d">30 days</button>
+        <button type="button" data-range="all">All time</button>
+      </div>
+      <select id="f-area" aria-label="Area"></select>
+      <select id="f-model" aria-label="Model"></select>
+      <select id="f-project" aria-label="Project"></select>
+      <select id="f-status" aria-label="Status">
+        <option value="">Any result</option><option value="ok">Succeeded</option><option value="failed">Failed</option>
+      </select>
+      <input id="f-q" type="search" placeholder="Search prompts and replies…" aria-label="Search">
+      <button class="link" id="f-clear" type="button" hidden>Clear filters</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <section class="stats" id="tiles"></section>
+
+    <section class="panel chart-card">
+      <div class="card-head">
+        <h2>Spend per day</h2>
+        <div class="legend" id="day-legend"></div>
+      </div>
+      <div class="chart-wrap" id="day-chart"></div>
+      <details class="table-view"><summary>Show as table</summary><div id="day-table"></div></details>
+    </section>
+
+    <section class="breakdowns">
+      <div class="panel"><div class="card-head"><h2>By activity</h2><span class="hint">click a row to filter</span></div><div class="bars" id="by-feature"></div></div>
+      <div class="panel"><div class="card-head"><h2>By model</h2></div><div class="bars" id="by-model"></div></div>
+      <div class="panel"><div class="card-head"><h2>By project</h2></div><div class="bars" id="by-project"></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="card-head"><h2>Calls</h2><span class="hint" id="calls-count"></span></div>
+      <div class="calls-scroll">
+        <table class="calls" id="calls">
+          <thead><tr><th>When</th><th>Activity</th><th>Project</th><th>Model</th><th>Sent</th><th>Got back</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions"><button class="btn secondary small" id="more" type="button" hidden>Show more</button></div>
+    </section>
+
+    <section class="panel pricing">
+      <div class="card-head"><h2>Rates used</h2><span class="hint" id="pricing-note"></span></div>
+      <div id="pricing"></div>
+    </section>
+  </main>
+
+  <div class="tip" id="tip" hidden></div>
+
+  <dialog id="detail" class="call-detail">
+    <div class="detail-head"><h2 id="d-title"></h2><button class="btn secondary small" id="d-close" type="button">Close</button></div>
+    <div class="meta-row" id="d-chips"></div>
+    <div id="d-body"></div>
+  </dialog>
+
+  <script src="/url-state.js"></script>
+  <script src="/costs.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Generated images, prompts, logs and API call records
+output/
+
+# Your own images (only the folder's README is tracked)
+media/*
+!media/README.md
+
+# Git bundles (local history backups)
+*.bundle
+
+# Node
+node_modules/
+npm-debug.log*
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

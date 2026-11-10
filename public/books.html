@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Story Books — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%237c5cff%27/%3E%3Cpath d=%27M12 16h16c3 0 4 2 4 4v30c0-2-2-3-4-3H12zM52 16H36c-3 0-4 2-4 4v30c0-2 2-3 4-3h16z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="books">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a class="on" href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="bk">
+    <!-- Bookshelf: every book as a cover -->
+    <section id="shelf" hidden>
+      <div class="shelf-head">
+        <div><h1>Story Books</h1><p class="hint" id="shelf-meta"></p></div>
+        <button id="new-book" class="btn primary" type="button">+ New book</button>
+      </div>
+      <div class="shelf-grid" id="shelf-grid"></div>
+    </section>
+
+    <!-- One book -->
+    <section id="workspace" hidden>
+      <div class="ws-bar">
+        <button class="link back" id="back" type="button">← All books</button>
+        <select id="book-select" title="Switch to another book"><option value="">Open a book…</option></select>
+        <span class="spacer"></span>
+        <span class="save-state" id="save-state"></span>
+        <button id="delete-book" class="btn secondary small danger" type="button" title="Delete this book (its images stay in History)">Delete book</button>
+      </div>
+
+      <div class="bk-head" id="bk-head">
+        <div class="bk-cover" id="bk-cover"></div>
+        <div class="bk-title">
+          <input id="title" class="book-title" type="text" placeholder="Untitled book">
+          <p class="bk-logline" id="head-logline"></p>
+          <div class="meta-row" id="head-chips"></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn secondary" id="read-toggle" type="button">📖 Read</button>
+          <a class="btn secondary" id="export-md" download>⬇ Manuscript</a>
+        </div>
+      </div>
+      <div class="note-warn" id="from-series" hidden></div>
+
+      <div class="panel results">
+        <div class="flow" id="flow">
+          <ol class="stepper" id="stepper">
+            <li data-step="outline"><b>1</b><span>Outline</span><small></small></li>
+            <li data-step="scripts"><b>2</b><span>Page text</span><small></small></li>
+            <li data-step="prompts"><b>3</b><span>Picture prompts</span><small></small></li>
+            <li data-step="images"><b>4</b><span>Pictures</span><small></small></li>
+            <li data-step="read"><b>5</b><span>Read</span><small></small></li>
+          </ol>
+          <div class="flow-row">
+            <button class="btn primary" id="next" type="button">Draft outline</button>
+            <button class="btn danger small" id="stop" type="button" hidden>Stop after this page</button>
+            <button class="btn secondary small" id="undo" type="button" hidden>↶ Undo</button>
+            <span class="spacer"></span>
+            <nav class="subtabs" id="subtabs">
+              <button type="button" data-sub="outline">Outline</button>
+              <button type="button" data-sub="pages">Pages</button>
+              <button type="button" data-sub="prompts">Picture prompts</button>
+              <button type="button" data-sub="story">Story &amp; cast</button>
+              <button type="button" data-sub="setup">Brief &amp; settings</button>
+            </nav>
+          </div>
+          <div class="progress" id="progress" hidden>
+            <div class="progress-line"><span class="spinner"></span><span id="progress-phase"></span><span class="hint" id="progress-time"></span></div>
+            <div class="bar"><i id="progress-bar"></i></div>
+            <div class="progress-snippet" id="progress-snippet"></div>
+          </div>
+          <div class="status" id="status"></div>
+          <div class="strip" id="strip"></div>
+        </div>
+
+        <div class="empty" id="empty">
+          <b>Start with the idea.</b> Say who the story is about, what they want and what gets in the way, or let ✨ Suggest ideas pitch some. Fill in the details (or let ✨ fill the blank ones), then <b>Draft the outline</b>: it plans every page, who is in it, where it happens and where it sits on the story arc, before any text or picture is made.
+        </div>
+
+        <!-- Brief & settings -->
+        <div id="tab-setup" class="setup">
+          <div class="box" id="brief-box">
+            <div class="box-title">Story brief</div>
+            <label class="field">
+              <span class="label-row"><span>Story idea</span><button class="link" id="suggest" type="button">✨ Suggest ideas</button></span>
+              <textarea id="premise" rows="4" placeholder="Who is it about, what do they want, and what gets in the way? A rough line is enough — or click ✨ Suggest ideas."></textarea>
+            </label>
+            <div class="ideas" id="ideas" hidden></div>
+            <div class="grid2">
+              <label class="field"><span>Audience</span><select id="audience"></select></label>
+              <label class="field"><span>Story pages</span><input id="page-count" type="number" min="4" max="32" value="12"></label>
+              <label class="field"><span>Tone</span><input id="tone" type="text" placeholder="cozy, funny, bedtime"></label>
+              <label class="field"><span>Theme / lesson</span><input id="theme-brief" type="text" placeholder="courage, friendship"></label>
+            </div>
+            <label class="field"><span>Setting <span class="hint">where and when</span></span><input id="setting" type="text" placeholder="a tide pool on a rocky shore, one sunny morning"></label>
+            <label class="field"><span>Illustration style</span><input id="style" type="text" placeholder="soft watercolor, pastel ocean palette, rounded shapes"></label>
+            <label class="field"><span>Notes for the writer</span><textarea id="brief-notes" rows="2" placeholder="Rhyming couplets; end with a bedtime line; include counting 1–5…"></textarea></label>
+            <div class="field">
+              <span>Studio characters <span class="hint">(kept on-model with their reference images)</span></span>
+              <div class="char-chips" id="brief-chars"></div>
+            </div>
+            <div class="brief-fill">
+              <button class="btn secondary small" id="fill-brief" type="button" title="Suggest a value for every blank detail from the story idea. Details you typed are kept.">✨ Fill in the blank details</button>
+              <span class="hint" id="brief-gaps"></span>
+            </div>
+          </div>
+          <div class="box" id="art-box">
+            <div class="box-title">Pictures <span class="hint" id="art-summary"></span></div>
+            <label class="field"><span>Image model</span><select id="img-model"></select></label>
+            <div class="grid2">
+              <label class="field"><span>Quality</span><select id="img-quality"></select></label>
+              <label class="field"><span>Page size</span><select id="img-size"></select></label>
+            </div>
+            <label class="field check"><span>Text</span><label><input type="checkbox" id="text-in-image"> Draw the text into the picture</label></label>
+          </div>
+        </div>
+
+        <div id="book" hidden>
+          <div id="editor">
+            <!-- Story & cast -->
+            <div id="tab-story" class="story-tab">
+              <div class="grid2">
+                <label class="field"><span>Logline <span class="hint">the story in one sentence</span></span><textarea id="logline" rows="2"></textarea></label>
+                <label class="field"><span>Theme <span class="hint">what it leaves the reader with</span></span><textarea id="theme" rows="2"></textarea></label>
+              </div>
+              <label class="field"><span>Style guide <span class="hint">added to every picture prompt</span></span><textarea id="style-guide" rows="3"></textarea></label>
+              <div class="section-title">Cast <button class="link" id="add-cast" type="button">+ add</button></div>
+              <div class="cast" id="cast"></div>
+            </div>
+            <!-- Outline: the plan for every page, written before any text or picture -->
+            <div id="tab-outline" class="outline-tab">
+              <div class="section-title">Storyline <span class="hint">the spine every page hangs on; given to the writer</span></div>
+              <div class="storyline" id="storyline"></div>
+              <label class="field"><span>World <span class="hint">places and recurring objects; added to every picture prompt</span></span><textarea id="world" rows="2"></textarea></label>
+              <div class="section-title">Story arc <span class="hint" id="arc-legend"></span></div>
+              <div class="arc-bar" id="arc-bar"></div>
+              <div class="section-title">Page by page <span class="hint" id="outline-meta"></span><span class="spacer"></span><button class="btn secondary small" id="fill-details" type="button" hidden title="Fill in the blank planning notes without changing the story">✨ Fill in the blank details</button></div>
+              <div class="outline" id="outline"></div>
+              <div class="section-title">Change the whole story</div>
+              <div class="revise-row">
+                <input id="outline-instructions" type="text" placeholder="“make the middle funnier”, “add a page where they count the fish”…">
+                <button class="btn secondary small" id="redraft" type="button">↻ Re-draft outline</button>
+              </div>
+            </div>
+            <!-- Picture prompts: read and edit every image prompt before anything is drawn -->
+            <div id="tab-prompts" class="prompts-tab" hidden>
+              <div class="prompt-list" id="prompt-list"></div>
+              <aside class="prompt-side" id="prompt-side"></aside>
+            </div>
+            <!-- Pages -->
+            <div id="tab-pages">
+              <div class="section-title">Pages <span class="hint" id="pages-meta"></span></div>
+              <div class="pages" id="pages"></div>
+            </div>
+          </div>
+          <div class="read-bar" id="read-bar" hidden>
+            <a class="btn secondary" id="dl-images" download>⬇ Download the pictures (.zip)</a>
+            <label class="read-opt" title="Adds story.md to the zip: the storyline, the text of every page and its planning notes, each next to its picture"><input type="checkbox" id="dl-story"> Include the storyline</label>
+            <label class="read-opt" title="How the words of each page are shown. Set over the picture: typeset in the calm area the picture keeps free, sized to fit, with colours taken from the picture itself.">Page text
+              <select id="read-text">
+                <option value="auto">Automatic</option>
+                <option value="over">Set over the picture</option>
+                <option value="below">Below the picture</option>
+                <option value="none">Hidden</option>
+              </select>
+            </label>
+            <span class="hint" id="dl-hint"></span>
+          </div>
+          <div class="preview" id="preview" hidden></div>
+          <details class="script" id="script" open hidden>
+            <summary>📜 Storyline &amp; script <span class="hint">the whole book in words: storyline, cast, and every page's text and plan</span></summary>
+            <div class="script-body" id="script-body"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script src="/books.js"></script>
+</body>
+</html>

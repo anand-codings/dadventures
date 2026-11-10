@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flash Cards — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%231f8f5f%27/%3E%3Crect x=%2714%27 y=%2718%27 width=%2728%27 height=%2736%27 rx=%274%27 fill=%27%23fff%27 opacity=%27.55%27/%3E%3Crect x=%2722%27 y=%2710%27 width=%2728%27 height=%2736%27 rx=%274%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="cards">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a class="on" href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta">Loading…</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <div class="tabs" id="tabs">
+        <button type="button" data-tab="library"><b>1</b> Library</button>
+        <button type="button" data-tab="templates"><b>2</b> Templates</button>
+        <button type="button" data-tab="series"><b>3</b> Series</button>
+      </div>
+
+      <!-- Library -->
+      <div class="tab-controls" data-for="library">
+        <p class="hint" id="lib-summary">Your existing cards. Analyzing a card reads its layout, text and art style so it can become a template.</p>
+        <button class="btn primary" id="analyze-new" type="button">Analyze new cards</button>
+        <div class="grid2">
+          <label class="field"><span>Format</span><select id="lib-filter"></select></label>
+          <label class="field"><span>Search</span><input id="lib-search" type="search" placeholder="title or file name"></label>
+        </div>
+        <div class="box">
+          <div class="label-row"><span id="sel-count">Nothing selected</span><button class="link" id="sel-none" type="button">clear</button></div>
+          <input id="tpl-instructions" type="text" placeholder="Optional: “simpler, 4 panels only”, “for toddlers”…">
+          <button class="btn secondary" id="make-template" type="button" disabled>Make a template from the selection</button>
+          <button class="btn secondary small" id="analyze-selected" type="button" disabled>Re-analyze selection</button>
+        </div>
+        <button class="btn secondary" id="suggest-groups" type="button">✨ Sort my cards into template families</button>
+      </div>
+
+      <!-- Templates -->
+      <div class="tab-controls" data-for="templates" hidden>
+        <p class="hint">A template is the reusable recipe for a card: its look, its page layout, and the content slots a new card fills in.</p>
+        <div class="tpl-list" id="tpl-list"></div>
+      </div>
+
+      <!-- Series -->
+      <div class="tab-controls" data-for="series" hidden>
+        <div class="library-row">
+          <select id="series-select"><option value="">Open a series…</option></select>
+          <button id="new-series" class="btn secondary small" type="button">+ New</button>
+          <button id="delete-series" class="btn secondary small" type="button" title="Delete this series (its images stay in History)">✕</button>
+        </div>
+        <details class="box" id="brief-box" open>
+          <summary>Series brief</summary>
+          <div class="radio-row">
+            <label><input type="radio" name="kind" value="set" checked> Set <span class="hint">— a collection, each card stands alone</span></label>
+          </div>
+          <div class="radio-row">
+            <label><input type="radio" name="kind" value="story"> Story <span class="hint">— read in order, like a comic or little book</span></label>
+          </div>
+          <label class="field"><span>Card template <span class="hint">(layout and content slots)</span></span><select id="template"></select></label>
+          <label class="field"><span>Look <span class="hint">(borrow the art style of another template)</span></span><select id="style-template"></select></label>
+          <label class="field"><span id="premise-label">What is the series about?</span><textarea id="premise" rows="3" placeholder="Animals that live in tide pools. Or: Pip the puffin flies south and learns how birds find their way."></textarea></label>
+          <label class="field"><span>Topics <span class="hint">(optional, one per line — otherwise the planner chooses)</span></span><textarea id="topics" rows="2" placeholder="Sea anemone&#10;Hermit crab&#10;Limpet"></textarea></label>
+          <div class="grid2">
+            <label class="field"><span>Audience</span><select id="audience"></select></label>
+            <label class="field"><span>Cards</span><input id="card-count" type="number" min="1" max="40" value="6"></label>
+          </div>
+          <label class="field"><span>Lesson <span class="hint">(stories: what the child takes away — leave empty and the planner picks one)</span></span><input id="lesson" type="text" placeholder="asking for help is brave · taking turns · it's okay to feel scared and try anyway"></label>
+          <label class="field"><span>Tone <span class="hint">(optional)</span></span><input id="tone" type="text" placeholder="playful, full of wonder"></label>
+          <label class="field"><span>Notes for the writer <span class="hint">(optional)</span></span><textarea id="notes" rows="2" placeholder="Always include one thing to find outdoors. Metric and imperial units."></textarea></label>
+          <div class="field">
+            <span>Studio characters <span class="hint">(kept on-model with their reference images)</span></span>
+            <div class="char-chips" id="brief-chars"></div>
+          </div>
+        </details>
+        <details class="box" id="art-box">
+          <summary>Picture settings <span class="hint" id="art-summary"></span></summary>
+          <div class="grid2">
+            <label class="field"><span>Image model</span><select id="img-model"></select></label>
+            <label class="field"><span>Quality</span><select id="img-quality"></select></label>
+          </div>
+          <label class="field"><span>Card size</span><select id="img-size"></select></label>
+          <label class="field"><span>Words on story cards</span><select id="text-mode">
+            <option value="captions">Captions and a play prompt — read the story from the script</option>
+            <option value="story">Story on the card — a short paragraph under the pictures, no script needed</option>
+          </select></label>
+          <button class="btn secondary small" id="redraw-all" type="button" hidden>↻ Redraw every card with these settings</button>
+          <div class="check-list">
+            <label><input type="checkbox" id="use-template-ref"> Send the template's example card as a visual reference</label>
+            <label><input type="checkbox" id="chain"> Send the first finished card so the series stays consistent</label>
+            <label><input type="checkbox" id="proof"> Proofread every card against its script and redraw once if something is wrong</label>
+            <label><input type="checkbox" id="badge"> Print a small “Series · 3 of 8” badge on each card</label>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel results">
+      <div class="flow" id="flow">
+        <ol class="stepper" id="stepper" hidden>
+          <li data-step="plan"><b>1</b><span>Plan</span><small></small></li>
+          <li data-step="write"><b>2</b><span>Write</span><small></small></li>
+          <li data-step="images"><b>3</b><span>Pictures</span><small></small></li>
+          <li data-step="print"><b>4</b><span>Print</span><small></small></li>
+        </ol>
+        <div class="flow-row" id="flow-row" hidden>
+          <button class="btn primary" id="next" type="button">Plan the series</button>
+          <button class="btn secondary small" id="draft-all" type="button" hidden title="Quick low-quality pictures of every card, to check the story reads before paying for the real ones">✏️ Draft storyboard</button>
+          <button class="btn danger small" id="stop" type="button" hidden>Stop after this card</button>
+          <button class="btn secondary small" id="upscale" type="button" hidden>⬆ Upscale ×4 for print</button>
+          <span class="spacer"></span>
+          <span class="save-state" id="save-state"></span>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-line"><span class="spinner"></span><span id="progress-phase"></span><span class="hint" id="progress-time"></span></div>
+          <div class="bar"><i id="progress-bar"></i></div>
+          <div class="progress-snippet" id="progress-snippet"></div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="strip" id="strip"></div>
+      </div>
+
+      <div id="view-library">
+        <div id="groups" hidden></div>
+        <div id="detail" hidden></div>
+        <div id="library"></div>
+      </div>
+      <div id="view-templates" hidden></div>
+      <div id="view-series" hidden>
+        <div class="empty" id="series-empty">
+          <b>Make a series of flash cards in four steps.</b><br>
+          Pick a template on the left, say what the series is about, then <b>Plan the series</b>.<br>
+          A <b>Set</b> is a collection (eight tide-pool animals). A <b>Story</b> is read in order, each card continuing the last.
+        </div>
+        <div id="series" hidden>
+          <div class="book-head"><input id="title" class="book-title" type="text" placeholder="Series title"></div>
+          <label class="field"><span>About</span><textarea id="logline" rows="2"></textarea></label>
+          <label class="field"><span>Look for this series <span class="hint">(leave empty to use the template's style guide)</span></span><textarea id="style-guide" rows="3"></textarea></label>
+          <div class="box" id="story-box" hidden>
+            <div class="box-title">Story foundation <span class="hint">what makes it a story: decided before any card is written, and every card serves it</span></div>
+            <div class="foundation" id="foundation"></div>
+            <div class="hint" id="editor-notes"></div>
+            <label class="field"><span>Story spine <span class="hint">the whole story in a few sentences; every card is one part of it</span></span><textarea id="spine" rows="4"></textarea></label>
+            <label class="field"><span>World <span class="hint">places and important objects, kept the same on every card</span></span><textarea id="world" rows="2"></textarea></label>
+            <div class="grid2">
+              <label class="field"><span>Refrain <span class="hint">chanted on every card</span></span><input id="refrain" type="text"></label>
+              <label class="field"><span>Hidden friend <span class="hint">to spot in every picture</span></span><input id="hidden-friend" type="text"></label>
+            </div>
+            <div class="section-title">Cover, chapter cards and places</div>
+            <div class="extras" id="extras"></div>
+            <div class="actions">
+              <button class="btn secondary small" id="make-places" type="button" title="One reference painting per place, sent with every card set there so the world stays the same">🏞 Place references</button>
+              <button class="btn secondary small" id="make-extras" type="button" title="A front cover and one title card per chapter">🎨 Cover &amp; chapter cards</button>
+              <button class="btn secondary small" id="tidy" type="button" title="Shorten long captions and use one name for each character and thing">✂️ Tidy the text</button>
+              <a class="btn secondary small" id="script" download>⬇ Read-aloud script</a>
+            </div>
+          </div>
+          <div class="revise-row">
+            <input id="plan-instructions" type="text" placeholder="Change the plan: “swap the crab for a sea star”, “make the ending funnier”…">
+            <button class="btn secondary small" id="replan" type="button">↻ Re-plan</button>
+          </div>
+          <div class="section-title">Cast <span class="hint">(recurring characters)</span> <button class="link" id="add-cast" type="button">+ add</button></div>
+          <div class="cast" id="cast"></div>
+          <div class="section-title">Cards <span class="hint" id="cards-meta"></span></div>
+          <div class="pages" id="cards"></div>
+          <button class="btn secondary small" id="add-card" type="button">+ Add a card</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script src="/cards.js"></script>
+</body>
+</html>
