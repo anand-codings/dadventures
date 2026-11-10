@@ -39,6 +39,18 @@ engaged each story card has its own **setting and colour palette**, a **play pro
 series **refrain** on its bottom ribbon and a tiny **hidden friend** to spot. The built-in **Toddler story — mixed layouts**
 template lets the planner pick a layout per card (full-page splash, two, three or four panels), never the same twice in a row.
 
+**Stories that add up.** Three things keep a story and its pictures consistent. (1) A **continuity reader** goes through the
+plan before and after the story editor, and through the finished script, asking "but why?": the obvious way out that nothing
+closes, a helper doing what the hero just failed at, someone turning up by coincidence, a character in two places, words that
+disagree with the picture briefs. What is still open is listed in the story box, each finding with **Rewrite these cards to
+fix it**; **🔎 Check the story adds up** re-runs it at any time. (2) Every story card has a **state**: where everyone and
+everything is at the end of that card (who is where and who cannot be seen, who holds what, what is blocked or open). It is
+planned with the story, editable on the card, sent with every picture and given to the proofreader. (3) Every story panel has
+a full **picture brief** (where, who is where, what each is doing, the state of the important things, camera) and a list of
+**who is drawn in it**; everyone else is named as not in the picture. A proofread picture that shows a character where the
+state says it cannot be (outside when it is trapped inside) fails, however small. Stories written before this get their state
+and panel lists read off the script the first time a card is proofread or drawn.
+
 **Checking and finishing a story.** With *Proofread every card* on (Picture settings), each new picture is read by a vision
 model against its script: every lettered word, who is in each panel, the hidden friend. Story-breaking problems trigger one
 automatic redraw; anything still wrong is shown on the card with ⚠ and a *Redraw fixing these* button, and small

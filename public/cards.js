@@ -6,7 +6,7 @@ const els = {
   tplInstructions: $('tpl-instructions'), makeTemplate: $('make-template'), analyzeSelected: $('analyze-selected'), suggestGroups: $('suggest-groups'),
   tplList: $('tpl-list'),
   seriesSelect: $('series-select'), newSeries: $('new-series'), deleteSeries: $('delete-series'), template: $('template'), styleTemplate: $('style-template'),
-  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
+  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), logic: $('logic'), checkLogic: $('check-logic'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
   artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textMode: $('text-mode'), redrawAll: $('redraw-all'), proof: $('proof'), draftAll: $('draft-all'), extras: $('extras'), makePlaces: $('make-places'), makeExtras: $('make-extras'), tidy: $('tidy'), useTemplateRef: $('use-template-ref'), chain: $('chain'), badge: $('badge'),
   stepper: $('stepper'), flowRow: $('flow-row'), next: $('next'), stop: $('stop'), upscale: $('upscale'), saveState: $('save-state'), status: $('status'), strip: $('strip'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
@@ -609,6 +609,32 @@ async function sendToSheets() {
 }
 
 // ---------- series: editor ----------
+// What the continuity reader found: each finding names its cards and can be sent to the writer as a rewrite instruction.
+function renderLogic() {
+  const l = series?.logic;
+  if (!l) { els.logic.innerHTML = ''; return; }
+  const head = l.holes.length
+    ? `<b>Continuity reader:</b> ${plural(l.holes.length, 'thing')} in the ${l.stage === 'script' ? 'written story' : 'plan'} ${l.holes.length === 1 ? 'does' : 'do'} not add up yet${l.fixed ? ` (the editor already fixed ${l.fixed} of ${l.found})` : ''}.`
+    : `<span class="proof ok">✓ Continuity reader: the ${l.stage === 'script' ? 'written story' : 'plan'} adds up${l.found ? ` (the editor fixed ${plural(l.found, 'hole')} first)` : ''}.</span>`;
+  els.logic.innerHTML = `<div>${head}</div>` + l.holes.map((h) => `<div class="hole ${escapeHtml(h.severity)}" data-hole="${escapeHtml(h.id)}"><div><b>${h.cards.length ? `Card${h.cards.length === 1 ? '' : 's'} ${h.cards.join(', ')}` : 'Whole story'}</b> · ${escapeHtml(h.problem)}</div><div class="fix">Smallest fix: ${escapeHtml(h.fix)}</div>
+    ${h.cards.length && h.cards.every((n) => series.cards.find((c) => c.n === n)?.title) ? '<div class="row"><button class="mini" data-fix-hole type="button">Rewrite these cards to fix it</button></div>' : ''}</div>`).join('');
+}
+async function checkLogic() {
+  await run('Reading the story for things that do not add up', async (onProgress) => {
+    await flush();
+    const r = await streamApi(`/api/cards/series/${series.id}/logic`, {}, onProgress);
+    series = r.series; renderSeries();
+    setStatus(r.logic.holes.length ? `The continuity reader found ${plural(r.logic.holes.length, 'thing')} that ${r.logic.holes.length === 1 ? 'does' : 'do'} not add up — see the story box.` : 'The continuity reader found nothing that does not add up.', r.logic.holes.length ? 'error' : 'ok');
+  });
+}
+els.checkLogic.addEventListener('click', checkLogic);
+els.logic.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-fix-hole]')) return;
+  const h = series.logic?.holes.find((x) => x.id === e.target.closest('[data-hole]').dataset.hole);
+  const ids = h ? h.cards.map((n) => series.cards.find((c) => c.n === n)?.id).filter(Boolean) : [];
+  if (ids.length) write(ids, `A continuity reader found this problem: ${h.problem} Fix it this way, changing as little else as possible: ${h.fix} Keep each card's "state" true and make every picture brief agree with it.`);
+});
+
 function renderSeries() {
   refreshFlow();
   syncUrl();
@@ -619,6 +645,7 @@ function renderSeries() {
   els.world.value = series.world || '';
   els.foundation.innerHTML = config.cards.foundationFields.map((f) => `<label class="field"><span>${escapeHtml(f.label)}</span><textarea data-f="${f.id}" rows="2">${escapeHtml(series.foundation?.[f.id] || '')}</textarea></label>`).join('');
   els.editorNotes.textContent = series.editorNotes ? `Story editor: ${series.editorNotes}` : '';
+  renderLogic();
   const ex = [series.cover?.imageId && ['Cover', series.cover.imageId], ...Object.entries(series.chapterCards || {}).map(([k, v]) => [`Chapter: ${k}`, v]), ...(series.places || []).map((pl) => [`Place: ${pl.name}`, pl.imageId])].filter((x) => x && x[1] && records.get(x[1]));
   els.extras.innerHTML = ex.length ? ex.map(([label, rid]) => `<a href="${escapeHtml(records.get(rid).url)}" target="_blank" title="${escapeHtml(label)}"><img loading="lazy" src="${escapeHtml(recThumb(rid))}" alt=""><span>${escapeHtml(label)}</span></a>`).join('') : `<span class="hint">None yet.${(series.places || []).length ? ` Places planned: ${escapeHtml(series.places.map((x) => x.name).join(', '))}.` : ''}</span>`;
   els.spine.value = series.spine || ''; els.refrain.value = series.refrain || ''; els.hiddenFriend.value = series.hiddenFriend || '';
@@ -674,13 +701,15 @@ function renderCards() {
       <select data-k="play"><option value="">No play prompt</option>${config.cards.playTypes.map((p) => `<option${p === c.play ? ' selected' : ''}>${p}</option>`).join('')}</select>
       <input data-k="setting" value="${escapeHtml(c.setting || '')}" placeholder="Where it happens and this card's colours"></div>
       <div class="card-extras story-role"><select data-k="arc" title="Where this card sits in the story"><option value="">Story stage…</option>${config.cards.arcStages.map((a) => `<option value="${a}"${a === c.arc ? ' selected' : ''}>${a}</option>`).join('')}</select>
-      <input data-k="feeling" value="${escapeHtml(c.feeling || '')}" placeholder="Feeling"><input data-k="purpose" value="${escapeHtml(c.purpose || '')}" placeholder="Why this card matters to the story"></div>` : '';
+      <input data-k="feeling" value="${escapeHtml(c.feeling || '')}" placeholder="Feeling"><input data-k="purpose" value="${escapeHtml(c.purpose || '')}" placeholder="Why this card matters to the story"></div>
+      <textarea class="card-state" data-k="state" rows="2" title="Sent with every picture of this card and checked by the proofreader" placeholder="Where everyone and everything is at the end of this card: who is where (and who cannot be seen), who holds what, what is blocked or open">${escapeHtml(c.state || '')}</textarea>` : '';
     const slots = slotsFor(t, c).map((s) => {
       const v = bySlot.get(s.key) || { heading: '', text: '', visual: '' }, max = Math.min(limit, s.maxWords || limit), n = words(v.text);
       const story = s.role === 'story-panel';
       return `<div class="card-slot" data-slot="${escapeHtml(s.key)}" data-max="${max}"><div class="s-label">${escapeHtml(s.label)}<small>${escapeHtml(s.position)}</small><span class="wc${n > max ? ' over' : ''}">${n}/${max} words</span></div>
         <div class="s-fields"><input data-s="heading" value="${escapeHtml(v.heading)}" placeholder="${story ? 'Caption' : 'Heading'}"><textarea data-s="text" placeholder="${story ? 'Speech bubble' : 'Text printed on the card'}">${escapeHtml(v.text)}</textarea>
-          <input class="s-visual" data-s="visual" value="${escapeHtml(v.visual)}" placeholder="Picture in this panel"></div></div>`;
+          ${story ? `<textarea class="s-visual" data-s="visual" rows="3" placeholder="Picture brief: where, who is where, what each is doing, the state of the important things, camera">${escapeHtml(v.visual)}</textarea>
+          <input class="s-shows" data-s="shows" value="${escapeHtml(Array.isArray(v.shows) ? v.shows.join(', ') : v.shows || '')}" placeholder="Who is drawn in this panel (names, comma separated) — everyone else is kept out" title="Only these characters are drawn in this panel; the proofreader fails a picture that shows anyone else">` : `<input class="s-visual" data-s="visual" value="${escapeHtml(v.visual)}" placeholder="Picture in this panel">`}</div></div>`;
     }).join('');
     const chips = series.cast.map((m) => `<span class="char-chip small${c.characters.includes(m.name) ? ' on' : ''}" data-cast="${escapeHtml(m.name)}">${escapeHtml(m.name)}</span>`).join('');
     return `<div class="page-card" data-id="${c.id}">
