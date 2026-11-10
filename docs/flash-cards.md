@@ -90,11 +90,6 @@ old and new words, and **↻ Redraw changed cards** redraws all of them.
 drifts between cards: a character's colour or size, an object that vanishes or reappears, a place that changes. Each item
 has a *Redraw card N to match* button.
 
-**Narration.** *🔊 Record the narration* (story box) speaks each card's read-aloud text as its own mp3 track, plus a
-title track, with chapters announced; pick the voice next to the button. Tracks are re-recorded only when their words or
-the voice change. Each card gets a player, and *⬇ Audio tracks (.zip)* downloads the numbered tracks with a playlist, ready
-to upload to a Yoto Make Your Own card. Files live in `output/cards/audio/<series id>/`.
-
 **Card backs.** *🂠 Card backs* typesets a reverse side for the cover and every card (number, chapter, the read-aloud
 text, the play prompt, the note for grown-ups) as 2048 × 3072 images under `output/cards/backs/<series id>/`. It uses
 headless Google Chrome (set `CHROME_BIN` if it is installed elsewhere), costs nothing, and re-typesets only backs whose
@@ -103,7 +98,7 @@ text changed. *Send to Print Sheets* then makes a double-sided sheet with each b
 **Stories for ages 1–3.** With the audience set to *1–3*, a story follows toddler rules instead of a shortened version of
 the older form: one everyday problem with one failed try, two or three characters, only one or two big pictures per card,
 captions of at most six words on a repeating sentence pattern, play prompts a toddler can do (point, say, wave), and no
-chapters. Narration recorded here also plays in Story Books → Read (*▶ Play the story*).
+chapters.
 
 **Continuing an earlier story.** In the brief, *Continue an earlier story* selects that story's studio characters, look
 and picture settings, and gives the planner its world, cast and places. Places that reappear keep their reference

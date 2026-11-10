@@ -5,7 +5,6 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { zipStore } from './books.js';
 
 export const ARCHETYPES = [
   { id: 'profile', label: 'Profile (one subject, fact panels around a hero picture)' },
@@ -568,7 +567,6 @@ export function createCards(deps) {
       if (!s) throw new HttpError(404, 'Series not found.');
       const result = await fn(s);
       await markStale(s).catch(() => {});
-      if (s.audio) s.audio.stale = audioState(s).stale;
       if (s.backs) s.backsStale = backsStale(s);
       s.updatedAt = new Date().toISOString();
       await writeJsonAtomic(seriesFile(id), s);
@@ -615,9 +613,8 @@ export function createCards(deps) {
     const first = s.cards.find((c) => c.imageId);
     const printed = (c) => c.slots.filter((x) => x.heading || x.text).map((x) => [x.heading, x.text].filter(Boolean).join(' ')).join(' ');
     const f = s.foundation || {};
-    const track = (key) => (s.audio?.tracks?.[key] ? `/output/cards/audio/${s.id}/${encodeURIComponent(s.audio.tracks[key].file)}` : null);
     const page = (c) => ({ id: c.id, kind: 'page', n: c.n, chapter: c.chapter || '', arc: c.arc || '', purpose: c.purpose || '', setting: c.setting || '', emotion: c.feeling || '', continuity: c.state || '', beat: c.beat || c.topic, text: c.narration || printed(c), illustration: `${c.title}${c.setting ? ` — ${c.setting}` : ''}`,
-      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [], audio: track(c.id) });
+      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [] });
     const book = {
       id: s.id, fromSeries: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, stage: s.cards.every((c) => c.title) ? 'scripted' : 'outlined',
       brief: { premise: s.brief.premise, audience: { '1-3': '0-3', '3-5': '3-5', '5-8': '5-8', '8-12': '6-9' }[s.brief.audience] || '3-5', pageCount: s.cards.length, tone: s.brief.tone,
@@ -625,7 +622,7 @@ export function createCards(deps) {
       chapterArt: s.chapterCards || {},
       title: s.title, logline: s.logline, theme: f.lesson || s.refrain || '', styleGuide: s.styleGuide || '', cast: s.cast, world: s.world || '',
       storyline: { want: f.want || '', obstacle: [f.challenge, f.failedTry && `First try: ${f.failedTry}`].filter(Boolean).join(' ') || '', turningPoint: f.turningChoice || '', resolution: s.cards.find((c) => c.arc === 'resolution')?.beat || '', change: f.change || '' },
-      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, audio: track('intro'), titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [] },
+      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [] },
         ...s.cards.map(page)],
       image: { model: s.image.model, quality: s.image.quality, size: s.image.size, textInImage: true },
     };
@@ -1291,67 +1288,6 @@ Report only what a parent reading the cards in a row, or a sharp-eyed child, wou
     return { series: updated, continuity: updated.continuity };
   }
 
-  // ---------- narration: one spoken track per card, for a Yoto Make Your Own card or any audio player ----------
-  // Track 00 announces the title; each card's track is its read-aloud narration, with the chapter announced on the first
-  // card of a chapter. A track is recorded again only when its words or the voice changed.
-  const VOICES = ['coral', 'sage', 'nova', 'ballad', 'fable', 'shimmer', 'alloy', 'ash', 'echo', 'onyx', 'verse'];
-  const AUDIO_DIR = path.join(CARDS_DIR, 'audio');
-  const VOICE_STYLE = 'Read like a warm, gentle storyteller reading a picture book aloud to a two-year-old: unhurried, clear and smiling, with a small pause after each sentence. Give each character who speaks a slightly different, playful voice, and say sound words (boing, whoosh, plop) with fun. Never rush.';
-  function narrationTracks(s) {
-    const tracks = [{ key: 'intro', n: 0, title: s.title || 'Story', text: `${s.title}.${s.cards.length > 1 ? ` A story in ${s.cards.length} cards.` : ''}` }];
-    let chapter = '', chapterNo = 0;
-    for (const c of s.cards) {
-      const body = c.narration || c.storyText || c.slots.map((x) => [x.heading, x.text].filter(Boolean).join(' ')).filter(Boolean).join(' ');
-      if (!c.title || !body) continue;
-      const head = c.chapter && c.chapter !== chapter ? `Chapter ${++chapterNo}. ${(chapter = c.chapter)}.\n\n` : '';
-      tracks.push({ key: c.id, n: c.n, title: c.title, text: `${head}${body}` });
-    }
-    return tracks;
-  }
-  async function handleNarrate(id, body = {}, progress = () => {}) {
-    let s = await getSeries(id);
-    if (s.brief.kind !== 'story') throw new HttpError(400, 'Narration is for story series.');
-    const voice = VOICES.includes(body.voice) ? body.voice : s.audio?.voice || 'coral';
-    const tracks = narrationTracks(s);
-    if (tracks.length < 2) throw new HttpError(400, 'Write the cards first.');
-    const dir = path.join(AUDIO_DIR, id);
-    await fsp.mkdir(dir, { recursive: true });
-    const old = s.audio?.tracks || {}, next = {};
-    let made = 0, cost = 0, done = 0;
-    for (const t of tracks) {
-      const hash = sha(`${voice}|${t.text}`);
-      progress({ phase: t.n ? `Recording card ${t.n} of ${s.cards.length}` : 'Recording the title', done: done++, total: tracks.length, snippet: t.title, force: true });
-      const prev = old[t.key];
-      if (prev && prev.hash === hash && !body.redo && await exists(path.join(dir, prev.file))) { next[t.key] = prev; continue; }
-      const r = await deps.ai.speech({ feature: 'card_narration', refs: { seriesId: id }, voice, input: t.text, instructions: VOICE_STYLE });
-      const file = `${String(t.n).padStart(2, '0')}-${slugify(t.title) || 'card'}-${hash.slice(0, 6)}.mp3`;
-      await fsp.writeFile(path.join(dir, file), r.buffer);
-      next[t.key] = { file, hash, seconds: r.seconds, at: new Date().toISOString() };
-      made++; cost += r.costUsd || 0;
-    }
-    for (const f of await fsp.readdir(dir).catch(() => [])) if (!Object.values(next).some((t) => t.file === f)) await fsp.rm(path.join(dir, f), { force: true });
-    s = await withSeries(id, (x) => { x.audio = { voice, tracks: next, at: new Date().toISOString() }; return x; });
-    await appendLog({ type: 'card_narration', seriesId: id, voice, tracks: tracks.length, recorded: made, costUsd: cost });
-    return { series: s, recorded: made, tracks: tracks.length, costUsd: cost };
-  }
-  // The tracks in reading order with plain numbered names, ready to drop onto a Yoto Make Your Own playlist.
-  async function exportAudioZip(id) {
-    const s = await getSeries(id);
-    const folder = slugify(s.title || 'story'), entries = [], list = [];
-    for (const t of narrationTracks(s)) {
-      const a = s.audio?.tracks?.[t.key];
-      const data = a && await fsp.readFile(path.join(AUDIO_DIR, id, a.file)).catch(() => null);
-      if (!data) continue;
-      const name = `${String(t.n).padStart(2, '0')} ${t.n ? t.title.replace(/[‘’]/g, "'").replace(/[\\/:*?"<>|“”]/g, '') : 'Title'}.mp3`;
-      entries.push({ name: `${folder}/${name}`, data }); list.push(name);
-    }
-    if (!entries.length) throw new HttpError(400, 'Record the narration first.');
-    entries.push({ name: `${folder}/playlist.m3u`, data: Buffer.from(list.join('\n') + '\n') });
-    return { zip: zipStore(entries), filename: `${folder}-audio.zip` };
-  }
-  // Which tracks no longer match the text (shown as "out of date" in the page).
-  const audioState = (s) => { const tracks = narrationTracks(s); const a = s.audio; return { tracks: tracks.length, stale: a ? tracks.filter((t) => a.tracks[t.key]?.hash !== sha(`${a.voice}|${t.text}`)).map((t) => t.key) : tracks.map((t) => t.key) }; };
-
   // ---------- card backs: a typeset reverse side for double-sided printing ----------
   // The back carries what the reader needs while the child looks at the picture: the card's number and chapter, the
   // read-aloud text, the play prompt and the note for grown-ups. Typeset as HTML and photographed with headless Chrome
@@ -1818,8 +1754,6 @@ Leave text that already follows the rules exactly as it is.`,
     else if (m === 'POST' && a === 'cards' && c === 'image') send(res, 200, await handleCardImage(id, b, await readJson(req)));
     else if (m === 'POST' && a === 'cards' && c === 'check') { const check = await checkCard(id, b); const proposal = check.pass ? null : await proposeFix(id, b, check).catch((e) => { console.error('script fix failed', e.message); return null; }); send(res, 200, { check: { ...check, proposal }, series: await getSeries(id) }); }
     else if (m === 'POST' && a === 'cards' && c === 'fix') send(res, 200, await handleApplyFix(id, b, await readJson(req)));
-    else if (m === 'POST' && a === 'narrate') { const body = await readJson(req); await getSeries(id); await streamed(res, url, 'the narrator', (progress) => handleNarrate(id, body, progress)); }
-    else if (m === 'GET' && a === 'audio.zip') { const { zip, filename } = await exportAudioZip(id); res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length, 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' }); res.end(zip); }
     else if (m === 'POST' && a === 'backs') send(res, 200, await handleBacks(id, await readJson(req)));
     else if (m === 'POST' && a === 'continuity') send(res, 200, await handleContinuity(id));
     else if (m === 'POST' && a === 'readback') { await getSeries(id); await streamed(res, url, CARD_MODEL, (progress) => handleReadback(id, progress)); }
@@ -1839,5 +1773,5 @@ Leave text that already follows the rules exactly as it is.`,
     return true;
   }
 
-  return { route, characterBible, config: () => ({ model: CARD_MODEL, visionModel: CARD_VISION_MODEL, audiences: CARD_AUDIENCES, archetypes: ARCHETYPES, slotRoles: SLOT_ROLES, playTypes: PLAY_TYPES, arcStages: ARC_IDS, foundationFields: FOUNDATION_FIELDS.map(([id, label]) => ({ id, label })), maxCards: MAX_CARDS, maxSlots: MAX_SLOTS, voices: VOICES }) };
+  return { route, characterBible, config: () => ({ model: CARD_MODEL, visionModel: CARD_VISION_MODEL, audiences: CARD_AUDIENCES, archetypes: ARCHETYPES, slotRoles: SLOT_ROLES, playTypes: PLAY_TYPES, arcStages: ARC_IDS, foundationFields: FOUNDATION_FIELDS.map(([id, label]) => ({ id, label })), maxCards: MAX_CARDS, maxSlots: MAX_SLOTS }) };
 }

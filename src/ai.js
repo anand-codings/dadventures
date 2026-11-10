@@ -27,8 +27,6 @@ export const PRICING = {
     'gpt-image-2.6-flare': IMAGE_RATES, 'gpt-image-2.6-sunburst': IMAGE_RATES,
     'gpt-image-2.5-flare': IMAGE_RATES, 'gpt-image-2.5-sunburst': IMAGE_RATES,
   },
-  // Speech is billed by audio length; the API returns no usage, so the cost is an estimate from the length of the result.
-  speech: { 'gpt-4o-mini-tts': { perMinute: 0.015 } },
   checked: '2026-11-09', source: 'https://developers.openai.com/api/docs/pricing',
 };
 // Shape the browser config has always exposed for image token rates.
@@ -273,30 +271,6 @@ export function createAi({ OUTPUT_DIR, OPENAI_API_KEY = '', FAL_KEY = '', HttpEr
     return { status, json, usage, costUsd: entry.costUsd, durationMs: entry.durationMs, callId: entry.id };
   }
 
-  // ---------- OpenAI speech ----------
-  // { feature, refs, model, voice, input, instructions } → { buffer (mp3), seconds, costUsd (estimate), durationMs, callId }
-  async function speech({ feature, refs, model = 'gpt-4o-mini-tts', voice = 'coral', input, instructions = '' }) {
-    if (!OPENAI_API_KEY) throw new HttpError(500, 'OPENAI_API_KEY is not set.');
-    const call = begin('openai', 'speech', { feature, refs, model, endpoint: '/v1/audio/speech' });
-    const body = { model, voice, input, response_format: 'mp3', ...(instructions ? { instructions } : {}) };
-    let res, buffer = null, error = null;
-    try {
-      res = await fetch('https://api.openai.com/v1/audio/speech', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (res.ok) buffer = Buffer.from(await res.arrayBuffer());
-      else error = (await res.json().catch(() => ({}))).error?.message || `OpenAI error ${res.status}`;
-    } catch (e) {
-      await record(finish(call, { ok: false, error: `network error — ${e.message}`, costUsd: 0, inputPreview: input, extra: { voice } }), { request: body, response: { error: e.message } });
-      throw e;
-    }
-    // Length from the file size: the mp3 comes back at a constant 128 kbit/s (16,000 bytes a second).
-    const seconds = buffer ? Math.max(1, Math.round(buffer.length / 16000)) : 0;
-    const rate = PRICING.speech[model]?.perMinute;
-    const entry = await record(finish(call, { ok: Boolean(buffer), status: res.status, error, costUsd: buffer ? (rate == null ? null : (seconds / 60) * rate) : 0, estimated: true, rates: rate == null ? null : { perMinute: rate }, inputPreview: input, outputPreview: buffer ? `${Math.round(buffer.length / 1024)} KB mp3, about ${seconds} s` : '', extra: { voice } }),
-      { request: body, response: { bytes: buffer?.length || 0, error } });
-    if (!buffer) throw new HttpError(httpStatus(res.status), error);
-    return { buffer, seconds, costUsd: entry.costUsd, durationMs: entry.durationMs, callId: entry.id };
-  }
-
   // ---------- fal.ai (queue API, no SDK) ----------
   async function falFetch(url, init = {}, label = 'fal') {
     let res;
@@ -492,5 +466,5 @@ export function createAi({ OUTPUT_DIR, OPENAI_API_KEY = '', FAL_KEY = '', HttpEr
     return { skipped: false, imported: out.length };
   }
 
-  return { text, image, speech, falUpscale, localUpscale, readCalls, readCall, backfill, ledgerFile: LEDGER };
+  return { text, image, falUpscale, localUpscale, readCalls, readCall, backfill, ledgerFile: LEDGER };
 }
