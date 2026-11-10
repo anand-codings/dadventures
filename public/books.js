@@ -192,17 +192,21 @@ async function loadBooks() {
   els.bookSelect.value = book?.id || '';
   if (!book && !creating) renderShelf();
 }
+const bookFinished = (b) => Boolean(b.pages) && b.scripted >= b.pages && b.illustrated >= b.pages + 1;
 function renderShelf() {
   els.shelfMeta.textContent = books.length ? `${books.length} book${books.length === 1 ? '' : 's'} · click one to open it` : '';
-  els.shelfGrid.innerHTML = books.map((b) => {
+  // Books still being made come first: they are what you came back for. A finished book needs no label or bar.
+  const ordered = [...books.filter((b) => !bookFinished(b)), ...books.filter(bookFinished)];
+  els.shelfGrid.innerHTML = ordered.map((b) => {
     const cover = b.coverImageId && imageUrl(b.coverImageId);
     const total = b.pages ? b.pages + 1 : 0;
-    const state = !b.pages ? 'Idea only' : b.scripted < b.pages ? `Writing · ${b.scripted}/${b.pages} pages` : b.illustrated < total ? `Illustrating · ${b.illustrated}/${total} pictures` : 'Finished';
-    return `<button class="shelf-book${state === 'Finished' ? ' done' : ''}" data-id="${b.id}" type="button">
+    const done = bookFinished(b);
+    const state = !b.pages ? 'Idea only' : b.scripted < b.pages ? `Writing · ${b.scripted}/${b.pages} pages` : !done ? `Illustrating · ${b.illustrated}/${total} pictures` : `${b.pages} pages`;
+    return `<button class="shelf-book${done ? ' done' : ''}" data-id="${b.id}" type="button">
       <span class="shelf-cover">${cover ? `<img loading="lazy" src="${cover}" alt="">` : `<span class="shelf-blank">${escapeHtml((b.title || '?').slice(0, 1))}</span>`}${b.fromSeries ? '<span class="shelf-tag">Flash Cards</span>' : ''}</span>
       <b>${escapeHtml(b.title)}</b>
-      <span class="shelf-state">${state}${b.pages ? ` · ${b.pages} pages` : ''}</span>
-      ${total ? `<span class="bar"><i style="width:${Math.round((100 * b.illustrated) / total)}%"></i></span>` : ''}</button>`;
+      <span class="shelf-state">${state}</span>
+      ${total && !done ? `<span class="bar"><i style="width:${Math.round((100 * b.illustrated) / total)}%"></i></span>` : ''}</button>`;
   }).join('') + `<button class="shelf-book shelf-new" id="shelf-new" type="button"><span class="shelf-cover"><span class="shelf-blank">+</span></span><b>New book</b><span class="shelf-state">Start from an idea</span></button>`;
 }
 async function closeBook() {
@@ -303,9 +307,10 @@ function refreshFlow() {
     els.outlineMeta.textContent = s.gaps ? `· ${s.gaps} planning note${s.gaps === 1 ? '' : 's'} still blank (outlined in amber)` : '· every page is fully planned ✓';
   }
   for (const b of els.pages.querySelectorAll('.p-image, .rw-go, .rw-chip')) b.disabled = busy;
-  for (const b of els.tabPrompts.querySelectorAll('button')) b.disabled = busy;
+  for (const b of els.tabPrompts.querySelectorAll('button:not([data-f])')) b.disabled = busy;
   const spend = book ? book.pages.flatMap((p) => p.imageIds).reduce((sum, id) => sum + (records.get(id)?.costUsd || 0), 0) : 0;
   if (s.outlined && book) renderHead();
+  syncHead();
   els.pagesMeta.textContent = s.outlined ? `${s.written}/${s.pages} written · ${s.pictured}/${s.all} pictures · picture spend ≈ ${fmtCost(spend)}` : '';
   renderStrip();
 }
@@ -359,7 +364,7 @@ function renderAll() {
   const outlined = Boolean(b?.pages.length);
   const working = Boolean(b) || creating;
   els.shelf.hidden = working; els.workspace.hidden = !working;
-  if (!working) { renderShelf(); syncUrl(); return; }
+  if (!working) { renderShelf(); syncHead(); syncUrl(); return; }
   els.empty.hidden = outlined; els.book.hidden = !outlined;
   els.deleteBook.hidden = !b;
   // Before the outline exists the brief is the page; afterwards the pages are, with the rest one click away.
@@ -383,6 +388,25 @@ function renderAll() {
   syncUrl();
 }
 
+// The header bar carries where you are: the shelf, or one book with a way back, its title and its actions.
+function syncHead() {
+  const sh = window.dvShell;
+  if (!sh) return;
+  const setActions = (...nodes) => { if (nodes.length !== sh.actions.children.length || nodes.some((n, i) => sh.actions.children[i] !== n)) sh.actions.replaceChildren(...nodes); };
+  if (!book && !creating) {
+    const done = books.filter(bookFinished).length, open = books.length - done;
+    sh.setHead({ sub: books.length ? `${books.length} book${books.length === 1 ? '' : 's'} · ${[done ? `${done} finished` : '', open ? `${open} in progress` : ''].filter(Boolean).join(', ')}` : null });
+    setActions(els.newBook);
+    return;
+  }
+  const outlined = Boolean(book?.pages.length);
+  const s = flowState();
+  const sub = outlined
+    ? [`Ages ${audience().id}`, `${s.pages} pages`, `${s.written}/${s.pages} written`, `${s.pictured}/${s.all} pictures`, s.stale ? `${s.stale} prompt${s.stale === 1 ? '' : 's'} need${s.stale === 1 ? 's' : ''} a look` : ''].filter(Boolean).join(' · ')
+    : null;
+  sh.setHead({ back: { label: 'All books', run: closeBook }, title: outlined ? els.title : book?.title || 'New book', sub });
+  setActions(...(outlined ? [els.readToggle, els.exportMd] : []));
+}
 function renderHead() {
   const s = flowState();
   const cover = book.pages.find((p) => p.kind === 'cover');
@@ -1027,10 +1051,21 @@ async function savePrompt(p, value) {
   catch (e) { setSave(`Not saved: ${e.message}`, 'error'); }
   renderPrompts(); refreshFlow();
 }
+let promptFilter = 'all';     // all | look | edited
 function renderPrompts() {
   if (!book || els.tabPrompts.hidden) return;
-  const pages = book.pages.filter((p) => p.illustration || p.beat);
+  const every = book.pages.filter((p) => p.illustration || p.beat);
+  // With a prompt per page, the ones that need you are easy to lose: missing or out of date, and the ones you edited.
+  const groups = { all: every, look: every.filter((p) => p.promptStale || (!p.imagePrompt && !p.imageId)), edited: every.filter((p) => p.imagePrompt && p.promptEdited && !p.promptStale) };
+  if (!groups[promptFilter].length) promptFilter = 'all';
+  const pages = groups[promptFilter];
   els.promptList.innerHTML = '';
+  if (every.length) {
+    const bar = document.createElement('div'); bar.className = 'seg-filters';
+    bar.innerHTML = [['all', 'All'], ['look', 'Needs a look'], ['edited', 'Edited by you']].map(([k, label]) => `<button type="button" data-f="${k}" class="${k === promptFilter ? 'on' : ''}"${groups[k].length ? '' : ' disabled'}>${label} <small>${groups[k].length}</small></button>`).join('');
+    bar.addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b && !b.disabled) { promptFilter = b.dataset.f; renderPrompts(); } });
+    els.promptList.appendChild(bar);
+  }
   if (!pages.length) els.promptList.innerHTML = '<div class="empty">Write the page text first. Each page’s picture brief is what its prompt is built from.</div>';
   for (const p of pages) {
     const state = !p.imagePrompt ? ['', 'No prompt yet'] : p.promptStale ? ['warn', 'Page changed since this was written'] : p.promptEdited ? ['edited', 'Edited by you'] : ['ready', 'Prompt ready'];
@@ -1042,7 +1077,7 @@ function renderPrompts() {
     card.innerHTML = `
       <div class="pc-head"><span class="chip">${pageLabel(p)}</span><h3>${escapeHtml(p.kind === 'cover' ? book.title : (p.beat || p.illustration).split(/(?<=[.!?])\s/)[0].slice(0, 70))}</h3><span class="chip ${state[0]}">${state[1]}</span>
         <span class="spacer"></span>
-        <button class="btn secondary small pc-rewrite" type="button" title="Compose the prompt again from the page as it is now. This replaces your edits to it.">↻ Rewrite</button>
+        <button class="btn quiet small pc-rewrite" type="button" title="Compose the prompt again from the page as it is now. This replaces your edits to it.">↻ Rewrite</button>
         <button class="btn secondary small pc-draw" type="button">${p.imageId ? '🎨 Draw again' : '🎨 Draw this one'}</button></div>
       <div class="pc-body">
         <div><div class="label-row"><span>Words on the page</span></div><p class="pc-words">${escapeHtml(p.kind === 'cover' ? book.title : p.text || '(not written yet)')}</p>
@@ -1073,10 +1108,8 @@ function renderPrompts() {
     <div><div class="label-row"><span>Size and quality</span></div><p>${escapeHtml(`${book.image.size} · ${book.image.quality} · ${book.image.model}`)}</p></div>
     <div class="estimate"><span class="hint">${missing ? `Drawing the ${missing} missing picture${missing === 1 ? '' : 's'} will cost about` : 'Every page has a picture'}</span><b>${missing && each ? fmtCost(each * missing) : missing ? '—' : '✓'}</b>
       <span class="hint">Prompts are free to rewrite. Drawing is the part that costs, so measure twice, draw once.</span></div>
-    <button class="btn secondary small ps-all" type="button">${s.prompted ? '↻ Rewrite all prompts' : 'Write the picture prompts'}</button>
-    ${missing && s.promptsDone ? `<button class="btn primary ps-draw" type="button">Draw ${missing} picture${missing === 1 ? '' : 's'}</button>` : ''}`;
+    <button class="btn secondary small ps-all" type="button">${s.prompted ? '↻ Rewrite all prompts' : 'Write the picture prompts'}</button>`;
   els.promptSide.querySelector('.ps-all').addEventListener('click', () => { if (!s.prompted || confirm('Rewrite every prompt from the pages as they are now? Prompts you edited are replaced too.')) writePrompts(null, true); });
-  els.promptSide.querySelector('.ps-draw')?.addEventListener('click', () => illustrateMissing());
 }
 
 async function illustrateMissing() {
@@ -1101,6 +1134,7 @@ async function illustrateMissing() {
     }
     hideProgress();
     setStatus(`${stopRequested ? 'Stopped' : 'Done'}: ${done} picture${done === 1 ? '' : 's'} for ≈ ${fmtCost(cost)}. They’re also in your image History, tagged “book”.`, 'ok');
+    if (done) window.dvShell?.flyby?.(missingPictures().length ? `${done} picture${done === 1 ? '' : 's'} landed` : 'Every page has its picture!');
   } catch (e) { hideProgress(); setStatus(`Stopped after ${done} picture${done === 1 ? '' : 's'} (≈ ${fmtCost(cost)}): ${escapeHtml(e.message)}`, 'error'); }
   finally { setBusy(false); els.stop.hidden = true; els.stop.textContent = 'Stop after this page'; await loadBooks(); }
 }
@@ -1198,4 +1232,5 @@ async function init() {
   });
 }
 
+document.addEventListener('dv-shell', syncHead);
 init().catch((e) => setStatus(`Failed to load: ${e.message}`, 'error'));

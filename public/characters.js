@@ -173,9 +173,19 @@ function render() {
   $('one-view').hidden = !c;
   document.title = `${c ? c.name : 'Characters'} — Dadventures`;
   $('topbar-meta').textContent = plural(characters.length, 'character');
+  syncHead(c);
   if (!c) return renderCast();
   renderSwitcher(); renderViewer(c); renderProfile(c); renderPictures(c);
 }
+
+// One character: the header bar names them, shows their face and carries the way back.
+function syncHead(c) {
+  const sh = window.dvShell;
+  if (!sh) return;
+  sh.setHead(c ? { back: { label: 'All characters', run: () => openCharacter(null) }, title: c.name, sub: plural(picturesOf(c).length, 'picture') } : { sub: characters.length ? `${plural(characters.length, 'character')} · the crew behind every bedtime story` : null });
+  sh.setMascot(c && c.refs && c.refs[0] ? { url: c.refs[0].thumbUrl, name: c.name } : null);
+}
+document.addEventListener('dv-shell', () => syncHead(characters.find((x) => x.id === currentId) || null));
 
 function openCharacter(id) {
   currentId = id; showing = null;
