@@ -608,3 +608,41 @@ body.books .spread.title-page { display: block; max-width: none; text-align: cen
 .extras a { width: 92px; display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 11px; text-decoration: none; }
 .extras img { width: 92px; height: 92px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
 .chapter-head img { width: min(360px, 80%); border-radius: 8px; margin: 10px auto 0; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+
+/* Flash Cards: storyboard, changed-since-picture marks, script corrections, whole-book check */
+.tile.stale { border-color: #f5a524; }
+.tile.stale::after { content: ''; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: #f5a524; }
+.proof.stale b { display: block; margin-bottom: 2px; }
+.proof .was { opacity: .7; text-decoration: line-through; }
+.proposal { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(245,165,36,.45); color: var(--text); }
+.proposal p { margin: 0 0 4px; }
+.proposal .to { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; margin: 3px 0 6px; }
+.proposal .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.continuity { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.continuity .issue { border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: 6px 8px; background: var(--panel); }
+.continuity .issue.major { border-left-color: #f5a524; }
+.continuity .issue .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.board-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.board-card { display: flex; flex-direction: column; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: grab; }
+.board-card.working { border-color: var(--accent); }
+.board-card.dragging { opacity: .4; }
+.board-card.over { box-shadow: -3px 0 0 var(--accent); }
+.board-card .b-art { position: relative; aspect-ratio: 2 / 3; background: var(--panel); border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; text-align: center; padding: 6px; }
+.board-card .b-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.board-card .b-num { position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,.65); color: #fff; font: 600 11px/1 inherit; padding: 3px 6px; border-radius: 4px; }
+.board-card .b-state { position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,.65); color: #fff; font-size: 10px; padding: 3px 6px; border-radius: 4px; }
+.board-card .b-state.warn { background: #f5a524; color: #000; }
+.board-card .b-title { font-weight: 600; font-size: 13px; }
+.board-card ol { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.board-card .b-text { font-size: 12px; color: var(--muted); margin: 0; }
+.board-card .b-row { display: flex; gap: 4px; margin-top: auto; }
+.board-card .b-row input { flex: 1; min-width: 0; font-size: 12px; }
+.board-foot { position: sticky; bottom: 0; margin-top: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.board-foot .cost { flex: 1; min-width: 260px; font-size: 13px; }
+.board-foot .cost b { font-size: 15px; }
+.narration-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.narration-bar select { width: auto; }
+.page-card audio, #intro-audio { width: 100%; height: 34px; margin-top: 4px; }
+.spread-audio { display: block; width: 100%; height: 34px; margin-top: 6px; }
+@media print { .spread-audio, #play-story { display: none !important; } }
