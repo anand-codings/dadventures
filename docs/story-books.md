@@ -35,6 +35,23 @@ illustrated.
    **🎨 Design character** turns a text-only cast member into a studio character (one 1024² design on white), so later pages
    use it as a reference. Re-illustrating keeps every version; click a thumbnail to choose.
 
+**Story consistency** (ported from Flash Cards). Every page also carries a **state**: where everyone and everything is at
+the end of the page (who is where and who cannot be seen, who holds what, what is blocked or open, the light), carried forward
+until a page changes it. The outline is written to five story-logic rules (the obvious way out is visibly closed, abilities
+are honest, nobody arrives by coincidence, one of each device, whereabouts carry forward), then a **continuity reader**
+goes through it for what does not add up; if it finds holes the outline is revised once and read again, and whatever is
+still open is listed in the Outline tab with the smallest fix and a button that rewrites the named pages (or prefills the
+re-draft box when they are not written yet). **🔎 Check the story adds up** (`POST /api/books/:id/logic`) re-reads the book as
+it stands, including page text and illustration briefs. Illustration briefs are 60–110 words in a fixed order (place, who is
+where, what each is doing and feeling, the state of every important object, camera) and must agree with the state; each
+picture prompt adds the **story facts** (the previous page's state and this page's) and an explicit "In this picture / NOT in
+this picture" list. After a picture is drawn a **proofreader** (a vision call, `POST /api/books/:id/pages/:pageId/check`)
+compares it with the page: characters present or wrongly present, anyone drawn where the state says they cannot be, the key
+object drawn in a state that undoes the problem, stray or wrong lettering, the cover title. A failing picture is redrawn
+once with the mistakes listed (a second paid picture) and the attempt with fewer problems stays selected; the result shows
+under the picture (✓ or ⚠ with **Redraw fixing these**). Switch it off with **Proofread** in Brief & settings
+(`image.proof`). Books copied from Flash Cards skip both readers.
+
 Illustrations are normal History records titled `<book> — page N` and tagged `book`, `<book-slug>`, `page-N`. **📖 Preview**
 shows the book as pages (and prints one page per sheet); **⬇ Manuscript** exports Markdown with text, briefs and image paths.
 Books are stored as `output/books/<id>.json`; deleting a book keeps its images. Outline, script and illustration events are

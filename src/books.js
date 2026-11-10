@@ -54,7 +54,7 @@ const ARC_IDS = ARC_STAGES.map((a) => a.id);
 const arcLabel = (id) => ARC_STAGES.find((a) => a.id === id)?.label || '';
 const STORYLINE_FIELDS = [['want', 'Want'], ['obstacle', 'Obstacle'], ['turningPoint', 'Turning point'], ['resolution', 'Resolution'], ['change', 'What changes']];
 // Planning notes kept for every page; they feed the page text and the picture prompt.
-const PAGE_META = [['purpose', 500], ['setting', 300], ['emotion', 200], ['continuity', 600]];
+const PAGE_META = [['purpose', 500], ['setting', 300], ['emotion', 200], ['continuity', 600], ['state', 700]];
 const MAX_PAGES = 32;
 
 const OUTLINE_INSTRUCTIONS = `You are an award-winning children's picture-book author and editor. From the user's brief, plan a short illustrated story book.
@@ -79,11 +79,61 @@ Plan every page in full; these notes are what the writer and the illustrator wor
 - setting: the specific place plus time of day or weather. Use the same wording for pages in the same place.
 - emotion: the main character's feeling and the mood of the page, in a few words.
 - continuity: what carries over from earlier pages and must be visible here (an object being carried, a change to how a character looks, something found, built or broken, the light getting later). Empty string when nothing carries over.
+- state: where things stand at the END of this page, as plain facts a picture could get wrong: where each cast member is (say plainly who is inside, under or behind something and so cannot be seen from outside, and why), who is holding or carrying whom or what, what is blocked, open, stuck or moved, and how much light is left. Two to four short sentences, using the same names as the cast and the settings. A fact repeats unchanged from page to page until that page's beat changes it.
+
+Story logic — the story must survive a sharp five-year-old who keeps asking "but why?":
+- The obvious way out is closed, visibly. For every obstacle, name the simplest thing anyone would try (climb up, go around, lift it, call for help) and make sure a page shows why that does not work. A stuck or trapped character or thing has a visible reason it cannot simply come free.
+- Abilities are honest. Each character can only do what its body and size (as given in the cast) allow, and the same on every page. A helper succeeds because of what it IS (the small one fits, the one with the light shows the way, the one with claws grips), never by being stronger than the bigger main character at the very thing the main character just failed.
+- Nobody arrives by coincidence. Every helper is met, and seen doing its special thing, before the lowest moment; the answer to the problem is already in the story before it is needed.
+- One of each device. Never two loose stones, two hollows, two gaps or two detours; an early episode either causes something later or is cut. Two different places or things never share a name.
+- Whereabouts carry forward. A character who is trapped, hidden, asleep, carried, riding on someone or left behind stays exactly so on every following page until a beat changes it; the same goes for anything held, stuck, blocked, opened, broken, lit or lost. Nobody is in two places, and nobody reappears without a page showing how. The page's "characters" list agrees with this.
+- When a continuity reader's findings are attached, fix every one with the smallest change that makes the story add up (close the obvious way out visibly, give the helper a job only its body can do, introduce a helper earlier, merge a repeated device, rename a second thing). Never fix a hole by adding an explanation in words: change what happens or what is seen. Then rewrite every page's state so it is true of the revised story.
 - Write in English. Return exactly the requested number of pages.`;
+
+// The continuity reader: a second reader who only looks for what does not add up (adapted from the Flash Cards story pipeline).
+const LOGIC_INSTRUCTIONS = `You are the continuity supervisor on a children's picture book, reading with the scepticism of a sharp five-year-old who keeps asking "but why?". You do not rewrite and you do not judge style. You find what does not add up. You are given the brief, the cast, and every page (its beat, who is listed on it and its state, and when it has been written, its text and illustration brief).
+
+Walk through the story page by page, keeping a private ledger of where every character and every important object is, and check:
+1. Obvious way out: for each obstacle, what is the simplest thing anyone would try? Does a page SHOW why it does not work? (Why not climb up? Why not go around? Why not ask sooner?)
+2. Abilities: can each character physically do what it does, given the body and size in the cast? Does a small helper succeed by strength at exactly what the bigger main character failed at? Does anyone's ability change between pages?
+3. Whereabouts: is anyone in two places, drawn or mentioned after being trapped, left behind or handed over with no page showing how they got free, or gone without a word? Does a page's illustration brief or list of characters put someone where the story says they are not?
+4. Object state: does something blocked, stuck, broken, held, lost or lit stay that way until a page changes it? Is the obstacle the same obstacle every time it is described (too high to reach on one page, tangled on the next)?
+5. Coincidence: does a helper or a fix turn up exactly when needed without having been met before?
+6. Repeats and dead ends: the same device used twice; an episode that causes nothing later and could be cut.
+7. Time: does the time of day or the deadline (light fading, bedtime) move steadily, never backwards, and is it kept or missed clearly?
+8. Words against pictures (written pages only): do the text, the illustration brief, the character list and the state of a page agree with each other — who is there, how many there are, what is being held?
+9. Names: one thing with two names, or two different things or places sharing one name.
+
+First fill in "ledger" honestly for every obstacle, every helper and every character; a line that reads "not closed", "first met at the moment of need", "the main character could have done this" or "moved with no page showing how" is a hole to report.
+Report only real problems that a parent reading aloud, or a child looking at the pictures, would trip over. Each problem: the page numbers, one plain sentence saying what does not add up, and the smallest change that would fix it. severity: "breaks" = the plot does not work or a picture would contradict the story; "confusing" = a listener would stop and ask; "small" = worth tidying. Worst first, at most twelve. Return an empty list when the story truly holds together; do not invent problems to seem thorough.`;
+const LOGIC_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['ledger', 'holes'],
+  properties: {
+    ledger: { type: 'string', description: 'your working notes, written BEFORE the holes, in short lines: for each obstacle — the obvious way out and which page closes it (or "not closed"); for each helper — the page where it is first met, what only it can do, and whether the main character could have done the same; for each character and key object — where it is on every page where that changes' },
+    holes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['pages', 'problem', 'fix', 'severity'], properties: {
+      pages: { type: 'array', description: 'the page numbers involved', items: { type: 'integer' } }, problem: { type: 'string' }, fix: { type: 'string' }, severity: { type: 'string', enum: ['breaks', 'confusing', 'small'] },
+    } } },
+  },
+};
+// The page proofreader: a vision model compares a finished picture with what the page says is in it.
+const PROOF_INSTRUCTIONS = `You are the proofreader for a children's picture book. Compare the finished illustration with what the page says it shows. Report: (1) expected lettering that is misspelled, altered, cut off or missing — ignore line breaks, capitalisation of display lettering, and curly versus straight quotes; (2) any words, letters, numbers, captions or speech bubbles in the picture that are not expected (when no lettering is expected, ANY readable lettering is extra text; a signature or watermark counts); (3) picture problems, each marked major or minor.
+MAJOR picture problems are only those a parent reading aloud would notice and that confuse the story: a named character drawn as a different character; a named character the picture needs is absent; a named character appears who should not be there; the one thing the page is about is not shown (the text says stuck and nothing is stuck).
+ALWAYS MAJOR, however small it is drawn and whatever else is right: a named character drawn where the story facts or the must-NOT-show list say it cannot be (outside and free when the facts say it is trapped inside something; moving by itself when it is being carried; present after being left behind; in a picture that does not list it). Check this before anything else, and name the character. Also major: the thing the story's problem depends on is drawn in a state that undoes the problem (something the facts call stuck or out of reach is free or within reach; an entrance the facts call blocked is wide open).
+MINOR is everything else: exact counts of background things, details of props and small objects, how something is held, pose and anatomy details, markings and stripes, colours of small things, scenery. When unsure, choose minor. Do not report matters of taste or composition at all.
+"pass" is true when there are no text problems, no extra text and no major picture problems.`;
+const PROOF_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['textProblems', 'extraText', 'pictureProblems', 'pass', 'fixNotes'],
+  properties: {
+    textProblems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['expected', 'found'], properties: { expected: { type: 'string' }, found: { type: 'string', description: 'what is lettered instead, or "missing"' } } } },
+    extraText: { type: 'array', description: 'lettering in the picture that is not expected', items: { type: 'string' } },
+    pictureProblems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['issue', 'severity'], properties: { issue: { type: 'string' }, severity: { type: 'string', enum: ['major', 'minor'] } } } },
+    pass: { type: 'boolean' }, fixNotes: { type: 'string', description: 'if not pass: short instructions for the illustrator, one per line; otherwise ""' },
+  },
+};
 
 const SCRIPT_INSTRUCTIONS = `You are a children's picture-book author working with an illustrator. You are given a book plan (title, theme, cast, style, and a beat for every page). Write the final on-page text and an illustration brief for the requested pages.
 
-Each page comes with planning notes: its stage on the story arc, its purpose, who is in it, the setting, the feeling and what carries over from earlier pages. Follow them. The text serves the page's purpose and feeling.
+Each page comes with planning notes: its stage on the story arc, its purpose, who is in it, the setting, the feeling, what carries over from earlier pages, and its "state" (the facts at the END of that page: who is where, who holds what, what is blocked or open, the light). Follow them. The text serves the page's purpose and feeling.
 
 Rules for "text" (the words printed on the page):
 - Fit the audience's word range per page exactly; read-aloud rhythm matters. Use repetition, sound words and gentle humor where it fits the tone.
@@ -91,13 +141,13 @@ Rules for "text" (the words printed on the page):
 - No headings, page numbers, or stage directions in the text.
 
 Rules for "illustration" (sent to the image model; it never sees other pages):
-- 40–90 words describing one single moment: setting, which characters appear and where (left/right, foreground/background), their action, pose and expression, key props, time of day and lighting, and camera framing (wide, medium, close-up).
-- State the setting from the planning notes, and spell out every carry-over detail (objects held, changes to a character or the scene) so the picture matches the pages around it.
+- The illustrator sees ONE page at a time and knows nothing else about the story, so each brief is complete: 60–110 words describing one single moment, in this fixed order: (1) where we are, naming the place from the planning notes and the part of it, with the landmark that matters and the time of day; (2) every character in the picture and exactly where each one is — left or right, in front or behind, inside or outside, on top of or under what; (3) what each is doing with which part of its body, and the one feeling on its face; (4) the state of every important object — who holds it, what is blocked, stuck, open, shut or out of reach, and by how much, including every carry-over detail; (5) how close the camera is and from where (wide, medium, close-up). Describe what is SEEN, not what it means.
+- Story state: the page's "state" gives the facts at the END of that page; the state of the page before it gives the facts as this page begins. The brief must agree with both. A character the state puts inside, under or behind something is drawn only there: if the picture looks in at them, say so in the brief ("seen through the gap, deep inside the hollow") and list them in "characters"; otherwise leave them out of the brief and out of "characters". Everyone and everything the page text names as present is in the brief.
 - Refer to characters by name only; do not redescribe their appearance (their look is supplied separately).
 - Never ask for text, letters or speech bubbles in the picture.
 - Vary framing across pages so the book does not feel repetitive.
 
-"characters": the names (exactly as in the cast) of every character visible on the page; keep the planned characters unless the scene needs a change.
+"characters": the names (exactly as in the cast) of every character drawn in the picture, and nobody else: never list a character who is not physically in the picture, and never leave out one who is. Keep the planned characters unless the scene needs a change.
 "textPlacement": where the page text will sit over the illustration (top, bottom, left or right); the illustrator keeps that area calm and uncluttered.
 
 If revision instructions are given, apply them to the requested pages while keeping everything else consistent.`;
@@ -124,7 +174,7 @@ const BRIEF_SCHEMA = { type: 'object', additionalProperties: false, required: BR
 const DETAILS_INSTRUCTIONS = `You are a children's picture-book editor. You are given a book plan in which some planning notes are missing. Complete the plan without changing the story: do not rewrite beats, text or anything that is already filled in.
 - storyline: want, obstacle, turningPoint, resolution, change (how the main character or their world is different at the end), one short line each.
 - world: one short paragraph on where and when the story happens, the places it returns to and the recurring objects with a fixed look.
-- For every page return: arc (${ARC_IDS.join(', ')}; stages run in that order and never go backwards), purpose (one sentence on what the page does for the story), characters (names exactly as in the cast who are visible on the page), setting (specific place plus time of day or weather; same wording for pages in the same place), emotion (the main character's feeling and the page's mood, a few words), continuity (what carries over from earlier pages and must be visible here; empty string when nothing does).
+- For every page return: arc (${ARC_IDS.join(', ')}; stages run in that order and never go backwards), purpose (one sentence on what the page does for the story), characters (names exactly as in the cast who are visible on the page), setting (specific place plus time of day or weather; same wording for pages in the same place), emotion (the main character's feeling and the page's mood, a few words), continuity (what carries over from earlier pages and must be visible here; empty string when nothing does), state (where things stand at the END of the page, read off the story as it is written: where each cast member is and who cannot be seen from outside, who is holding or carrying what, what is blocked, open, stuck or moved, and the light; two to four short sentences; a fact carries forward unchanged until a page changes it).
 Return every page, in order. English only.`;
 
 const pageMetaProps = {
@@ -134,6 +184,7 @@ const pageMetaProps = {
   setting: { type: 'string' },
   emotion: { type: 'string' },
   continuity: { type: 'string' },
+  state: { type: 'string', description: 'where everyone and everything is at the END of this page (who is where and who cannot be seen, who holds what, what is blocked or open, the light); 2–4 short sentences' },
 };
 const storylineSchema = { type: 'object', additionalProperties: false, required: STORYLINE_FIELDS.map(([k]) => k), properties: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, { type: 'string' }])) };
 const DETAILS_SCHEMA = {
@@ -185,6 +236,7 @@ export function createBooks(deps) {
   const { OUTPUT_DIR, BOOK_MODEL, API_KEY, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
     readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, validateSize,
     IMAGE_MODELS, QUALITIES } = deps;
+  const SEVERITIES = ['breaks', 'confusing', 'small'];
   const BOOKS_DIR = path.join(OUTPUT_DIR, 'books');
   const bookFile = (id) => {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError(404, 'Book not found.');
@@ -195,8 +247,10 @@ export function createBooks(deps) {
   // Books written before the outline carried planning notes (and Flash Cards mirrors) get blank ones.
   function normalize(b) {
     b.storyline = { ...Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), ...(b.storyline || {}) };
-    b.world ??= ''; b.brief.setting ??= '';
+    b.world ??= ''; b.brief.setting ??= ''; b.logic ??= null;
     for (const p of b.pages) { p.arc ??= ''; for (const [k] of PAGE_META) p[k] ??= ''; }
+    // A Flash Cards mirror carries each card's state in `continuity`; show it as the page's state too rather than as a blank note.
+    if (b.fromSeries) for (const p of b.pages) if (p.kind === 'page' && !p.state) p.state = p.continuity;
     return b;
   }
   let lock = Promise.resolve();
@@ -245,16 +299,17 @@ export function createBooks(deps) {
     const quality = QUALITIES.includes(v.quality) ? v.quality : prev.quality || 'high';
     let size = v.size ? String(v.size) : prev.size || '2048x2048';
     validateSize(size);
-    return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage) };
+    // proof: every new picture is read by the proofreader and redrawn once if it contradicts the page (on unless switched off).
+    return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage), proof: 'proof' in v ? Boolean(v.proof) : prev.proof !== false };
   }
-  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], ...fields });
+  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', state: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], check: null, ...fields });
 
   // ---------- LLM ----------
   // Streams the Responses API so long writing calls can report progress; onText receives the JSON text so far.
-  async function llmJson(name, instructions, input, schema, logBase, onText = () => {}) {
+  async function llmJson(name, instructions, input, schema, logBase, onText = () => {}, effort = 'medium') {
     const { type, ...refs } = logBase;
     try {
-      const r = await deps.ai.text({ feature: type, refs, model: BOOK_MODEL, instructions, input, effort: 'medium', schema, schemaName: name }, onText);
+      const r = await deps.ai.text({ feature: type, refs, model: BOOK_MODEL, instructions, input, effort, schema, schemaName: name }, onText);
       return { parsed: r.parsed, durationMs: r.durationMs, usage: r.usage, costUsd: r.costUsd };
     } catch (e) {
       await appendLog({ ...logBase, type: `${type}_failed`, error: e.message, model: BOOK_MODEL });
@@ -294,6 +349,7 @@ export function createBooks(deps) {
         if (c) { p.imageIds = [...new Set([...p.imageIds, ...c.imageIds])]; p.imageId = c.imageId || p.imageId; }
       }
       if (b.pages.length) b.brief.pageCount = b.pages.filter((p) => p.kind === 'page').length;
+      b.logic = null;      // the reader's findings were about the version just undone
       return b;
     });
     await appendLog({ type: 'book_undo', bookId: id, undone: label });
@@ -375,6 +431,7 @@ export function createBooks(deps) {
         p.setting && `  Setting: ${p.setting}`,
         p.emotion && `  Feeling: ${p.emotion}`,
         p.continuity && `  Carries over: ${p.continuity}`,
+        p.state && `  State at the end: ${p.state}`,
         p.text && `  Current text: ${p.text}`,
       ].filter(Boolean).join('\n')).join('\n')}`,
     ].filter(Boolean).join('\n\n');
@@ -397,10 +454,36 @@ export function createBooks(deps) {
     const extra = clampStr(body.instructions, 2000);
     const input = briefText(book, chars) + (extra ? `\n\nRevision instructions: ${extra}` : '');
     const total = book.brief.pageCount;
-    const { parsed, durationMs, usage } = await llmJson('book_outline', OUTLINE_INSTRUCTIONS, input, outlineSchema(total), { type: 'book_outline', bookId: id }, (t) => progress(
-      !t.includes('"cast"') ? { phase: 'Finding the title and art style', snippet: lastString(t, 'title') }
-        : !t.includes('"pages"') ? { phase: `Creating the cast (${countKey(t, 'role')})`, snippet: lastString(t, 'name') }
-          : { phase: `Planning page ${Math.min(total, Math.max(1, countKey(t, 'beat')))} of ${total}`, done: Math.max(0, countKey(t, 'beat') - 1), total, snippet: lastString(t, 'beat') }));
+    const onOutline = (prefix) => (t) => progress(
+      !t.includes('"cast"') ? { phase: `${prefix}Finding the title and art style`, snippet: lastString(t, 'title') }
+        : !t.includes('"pages"') ? { phase: `${prefix}Creating the cast (${countKey(t, 'role')})`, snippet: lastString(t, 'name') }
+          : { phase: `${prefix}Planning page ${Math.min(total, Math.max(1, countKey(t, 'beat')))} of ${total}`, done: Math.max(0, countKey(t, 'beat') - 1), total, snippet: lastString(t, 'beat') });
+    const first = await llmJson('book_outline', OUTLINE_INSTRUCTIONS, input, outlineSchema(total), { type: 'book_outline', bookId: id }, onOutline(''));
+    let { parsed } = first;
+    const { durationMs, usage } = first;
+    // Continuity reader: read the plan for holes, let the writer fix them once, read again; what is still open is kept
+    // on the book for the author. A failed reader or revision never loses the outline already written.
+    let logic = null;
+    if (!book.fromSeries) {
+      const draft = (o) => ({ ...book, title: o.title, logline: o.logline, storyline: o.storyline || {}, world: o.world, cast: o.cast || [],
+        pages: (o.pages || []).slice(0, total).map((p, i) => ({ ...p, kind: 'page', n: i + 1, characters: p.characters || [] })) });
+      const read = (o, label) => findHoles(id, storyDigest(draft(o)), (t) => progress({ phase: `${label} (${countKey(t, 'problem')} found so far)`, snippet: lastString(t, 'problem') })).catch(() => null);
+      const found = await read(parsed, 'Continuity reader: checking the plan adds up');
+      if (found) {
+        logic = { at: new Date().toISOString(), stage: 'plan', holes: found, found: found.length, fixed: 0 };
+        if (found.length) {
+          const revised = await llmJson('book_outline', OUTLINE_INSTRUCTIONS,
+            `${input}\n\nFIRST OUTLINE (JSON):\n${JSON.stringify(parsed)}\n\nA continuity reader found these problems in the first outline:\n${holeLines(found)}\n\nReturn the whole outline again with every one of them fixed by the smallest change that makes the story add up. Keep everything that already works (title, cast names, style guide, the pages that are not involved) exactly as it is, and rewrite every page's state so it is true of the revised story.`,
+            outlineSchema(total), { type: 'book_outline_fix', bookId: id }, onOutline(`Fixing ${found.length} thing${found.length === 1 ? '' : 's'} that did not add up · `)).catch(() => null);
+          if (revised?.parsed?.pages?.length === total) {
+            const left = await read(revised.parsed, 'Continuity reader: checking the fixed plan');
+            parsed = revised.parsed;
+            // If the second read failed, what is still open is unknown: store nothing rather than the stale findings.
+            logic = left ? { at: new Date().toISOString(), stage: 'plan', holes: left, found: found.length, fixed: Math.max(0, found.length - left.length) } : null;
+          }
+        }
+      }
+    }
     const updated = await withBook(id, (b) => {
       if (b.pages.length) snapshot(b, 'Re-drafted outline');
       b.title = clampStr(parsed.title, 200); b.logline = clampStr(parsed.logline, 1000); b.theme = clampStr(parsed.theme, 1000);
@@ -420,10 +503,53 @@ export function createBooks(deps) {
       while (planned.length < b.brief.pageCount) planned.push({});
       b.pages = [newPage('cover', 0, { illustration: clampStr(parsed.coverIllustration, 2000), textPlacement: 'top', characters: b.cast.slice(0, 3).map((c) => c.name) }), ...planned.map((fields, i) => newPage('page', i + 1, fields))];
       b.stage = 'outlined';
+      b.logic = logic;
       return b;
     });
-    await appendLog({ type: 'book_outline', bookId: id, title: updated.title, pages: updated.brief.pageCount, model: BOOK_MODEL, usage, durationMs });
+    await appendLog({ type: 'book_outline', bookId: id, title: updated.title, pages: updated.brief.pageCount, model: BOOK_MODEL, usage, durationMs,
+      logic: logic && { found: logic.found, fixed: logic.fixed, open: logic.holes.map((h) => `${h.severity}: pages ${h.pages.join(', ')} — ${h.problem}`) } });
     return updated;
+  }
+
+  // ---------- story logic: a reader who only looks for what does not add up ----------
+  // The story as the continuity reader sees it: the plan of every page and, where written, its text and illustration brief.
+  function storyDigest(book) {
+    const a = audienceOf(book);
+    const sl = book.storyline || {};
+    const pageText = (p) => [
+      `Page ${p.n}${[p.arc, p.setting && `setting: ${p.setting}`, p.emotion && `feeling: ${p.emotion}`].filter(Boolean).length ? ` [${[p.arc, p.setting && `setting: ${p.setting}`, p.emotion && `feeling: ${p.emotion}`].filter(Boolean).join('; ')}]` : ''}`,
+      `  What happens: ${p.beat || '—'}`,
+      `  Characters listed on the page: ${(p.characters || []).join(', ') || 'none'}`,
+      p.continuity && `  Carries over: ${p.continuity}`,
+      p.state && `  State at the end: ${p.state}`,
+      p.text && `  Text: ${p.text}`,
+      p.text && p.illustration && `  Illustration brief: ${p.illustration}`,
+    ].filter(Boolean).join('\n');
+    return [
+      `Story: "${book.title}" — ${book.logline}`, `Brief: ${book.brief.premise}`, `Audience: ages ${a.id} (${a.label}).`,
+      STORYLINE_FIELDS.some(([k]) => sl[k]) && `Storyline:\n${STORYLINE_FIELDS.filter(([k]) => sl[k]).map(([k, label]) => `- ${label}: ${sl[k]}`).join('\n')}`,
+      book.world && `World: ${book.world}`,
+      `Cast (body and size decide what each can do):\n${book.cast.map((c) => `- ${c.name} (${c.role}): ${String(c.description || '').slice(0, 400)}`).join('\n')}`,
+      `PAGES, in reading order:\n${book.pages.filter((p) => p.kind === 'page').map(pageText).join('\n')}`,
+    ].filter(Boolean).join('\n\n');
+  }
+  async function findHoles(id, digest, onText) {
+    const { parsed } = await llmJson('book_story_logic', LOGIC_INSTRUCTIONS, digest, LOGIC_SCHEMA, { type: 'book_story_logic', bookId: id }, onText);
+    return (parsed.holes || []).slice(0, 12).map((h) => ({ id: crypto.randomUUID(), pages: [...new Set((h.pages || []).filter((n) => Number.isInteger(n) && n > 0))].sort((x, y) => x - y),
+      problem: clampStr(h.problem, 600), fix: clampStr(h.fix, 600), severity: SEVERITIES.includes(h.severity) ? h.severity : 'confusing' })).filter((h) => h.problem);
+  }
+  const holeLines = (holes) => holes.map((h) => `- Page${h.pages.length === 1 ? '' : 's'} ${h.pages.join(', ') || '—'} (${h.severity}): ${h.problem} Smallest fix: ${h.fix}`).join('\n');
+  // Read the book as it stands (plan, plus text and illustration briefs where written) and keep what the reader found.
+  async function handleLogic(id, progress = () => {}) {
+    const book = await getBook(id);
+    if (book.fromSeries) throw new HttpError(400, 'This book is a copy of a Flash Cards story. Check the story in Flash Cards.');
+    const pages = book.pages.filter((p) => p.kind === 'page');
+    if (!pages.length) throw new HttpError(400, 'Generate an outline first.');
+    const holes = await findHoles(id, storyDigest(book), (t) => progress({ phase: `Reading the story for things that do not add up (${countKey(t, 'problem')} so far)`, snippet: lastString(t, 'problem') }));
+    const logic = { at: new Date().toISOString(), stage: pages.every((p) => p.text) ? 'script' : 'plan', holes, found: holes.length, fixed: 0 };
+    const updated = await withBook(id, (b) => { b.logic = logic; return b; });
+    await appendLog({ type: 'book_story_logic', bookId: id, stage: logic.stage, holes: holes.map((h) => `${h.severity}: pages ${h.pages.join(', ')} — ${h.problem}`) });
+    return { book: updated, logic };
   }
 
   // Fill in whatever planning notes are still blank (older books, hand-added pages) without touching the story.
@@ -480,6 +606,8 @@ export function createBooks(deps) {
         written++;
       }
       if (b.pages.filter((p) => p.kind === 'page').every((p) => p.text)) b.stage = 'scripted';
+      // A finding whose pages were all just rewritten to an instruction is taken as dealt with; 🔎 reads the story again.
+      if (extra && b.logic?.holes.length) { const done = new Set(wanted.map((w) => w.n)); b.logic.holes = b.logic.holes.filter((h) => !h.pages.length || !h.pages.every((n) => done.has(n))); }
       return b;
     });
     await appendLog({ type: 'book_scripts', bookId: id, pages: wanted.map((p) => p.n), written, instructions: extra || null, model: BOOK_MODEL, usage, durationMs });
@@ -487,7 +615,19 @@ export function createBooks(deps) {
   }
 
   // ---------- illustrations ----------
-  function pagePrompt(book, page) {
+  // The facts a picture of this page must agree with: the previous page's state as it begins, its own state by the end.
+  function storyFacts(book, page) {
+    if (page.kind !== 'page') return [];
+    const before = book.pages.find((p) => p.kind === 'page' && p.n === page.n - 1)?.state;
+    return [before && `As this page begins: ${before}`, page.state && `By the end of this page: ${page.state}`].filter(Boolean);
+  }
+  // Who is drawn on a story page and who is not; null when the page lists nobody (unknown rather than "nobody").
+  function inPicture(book, page) {
+    if (page.kind !== 'page' || !page.characters.length) return null;
+    return { shown: page.characters, absent: book.cast.map((c) => c.name).filter((n) => !page.characters.includes(n)) };
+  }
+  const withFix = (prompt, fixNotes) => (fixNotes ? `${prompt}\n\nA previous attempt at this picture had these mistakes — make sure this one does not:\n${fixNotes}` : prompt);
+  function pagePrompt(book, page, fixNotes = '') {
     const pages = book.pages.filter((p) => p.kind === 'page').length;
     const present = book.cast.filter((c) => page.characters.includes(c.name));
     const unlinked = present.filter((c) => !c.characterId);
@@ -504,6 +644,9 @@ export function createBooks(deps) {
       (book.world || book.brief.setting) && `Story world (the same on every page): ${book.world || book.brief.setting}`,
     ].filter(Boolean);
     if (notes.length) lines.push('', ...notes);
+    const facts = storyFacts(book, page), who = inPicture(book, page);
+    if (facts.length) lines.push('', 'Story facts — where everyone and everything is. The picture must agree with them; they are for drawing from, never for lettering:', ...facts.map((x) => `- ${x}`));
+    if (who) lines.push('', `In this picture: ${who.shown.join(', ')}.${who.absent.length ? ` NOT in this picture: ${who.absent.join(', ')}.` : ''}`);
     if (unlinked.length) lines.push('', `Characters (draw them exactly like this on every page):\n${unlinked.map((c) => `- ${c.name}: ${c.description}`).join('\n')}`);
     lines.push('', `Style (identical on every page of the book): ${book.styleGuide || book.brief.style || 'warm, friendly picture-book illustration'}`);
     const area = { top: 'top quarter', bottom: 'bottom quarter', left: 'left third', right: 'right third' }[page.textPlacement] || 'bottom quarter';
@@ -511,8 +654,9 @@ export function createBooks(deps) {
     else if (book.image.textInImage && page.text) lines.push('', `Text: print exactly this text in the ${area}, in a clean, rounded, highly legible children's-book font on a calm area of the picture: "${page.text.replace(/"/g, "'")}". No other text.`);
     else lines.push('', `Composition: keep the ${area} of the image calm and uncluttered (simple background, no important details) so the page text can be placed there later.`);
     lines.push('', 'Constraints:', '- Full-bleed illustration, no border, no frame, no watermark, no signature.');
+    if (who) lines.push('- Draw only the characters listed under "In this picture", each exactly once; no other named character appears anywhere, not even small or in the background.');
     if (!isCover && !(book.image.textInImage && page.text)) lines.push('- No text, letters, numbers, captions or speech bubbles anywhere in the image.');
-    return lines.join('\n');
+    return withFix(lines.join('\n'), fixNotes);
   }
 
   // ---------- picture prompts ----------
@@ -542,14 +686,70 @@ export function createBooks(deps) {
     return { promptEdited: edited, promptStale: canPrompt(p) && pagePrompt(book, p) !== p.promptAuto };
   }
 
-  async function handlePageImage(id, pageId) {
+  // Proofreader: a vision model looks at the finished picture next to what the page says is in it — who is there and who
+  // must not be, where the story facts put everyone, the thing the problem depends on, and any lettering.
+  async function checkPage(id, pageId, recordId) {
+    const book = await getBook(id);
+    if (book.fromSeries) throw new HttpError(400, 'This book is a copy of a Flash Cards story. Proofread the cards in Flash Cards.');
+    const page = book.pages.find((p) => p.id === pageId);
+    if (!page) throw new HttpError(404, 'Page not found.');
+    const recId = recordId || page.imageId;
+    const file = recId && deps.recordFile && await deps.recordFile(recId);
+    if (!file) throw new HttpError(400, 'This page has no picture to check.');
+    const isCover = page.kind === 'cover';
+    const lettered = isCover ? book.title : book.image.textInImage && page.text ? page.text : '';
+    const facts = storyFacts(book, page), who = inPicture(book, page);
+    const cast = book.cast.map((c) => `- ${c.name}: ${String(c.description || '').slice(0, 220)}`).join('\n');
+    const label = isCover ? 'cover' : `page ${page.n}`;
+    const input = [{ role: 'user', content: [{ type: 'input_text', text: [
+      isCover ? `Front cover of "${book.title}".` : `Page ${page.n} of "${book.title}".`,
+      lettered ? `LETTERING THAT MUST APPEAR (exactly this${isCover ? ', the title' : ''}, and no other text):\n${lettered}` : 'NO LETTERING IS EXPECTED: the picture must contain no words, letters, numbers, captions or speech bubbles at all.',
+      `WHAT THE PICTURE SHOULD SHOW:\n${page.illustration || page.beat}`,
+      !isCover && page.text && !lettered && `The words printed next to it (not in the picture): ${page.text}`,
+      who ? `NAMED CHARACTERS — must show: ${who.shown.join(', ')}; must NOT show: ${who.absent.join(', ') || '—'}` : isCover && page.characters.length ? `NAMED CHARACTERS expected on the cover: ${page.characters.join(', ')} (others may appear too).` : '',
+      facts.length && `STORY FACTS (where everyone and everything is at this point of the story; the picture may not contradict them):\n${facts.join('\n')}`,
+      !isCover && book.storyline.obstacle && `THE PROBLEM THE STORY DEPENDS ON: ${book.storyline.obstacle}`,
+      cast && `CHARACTERS (how to tell them apart):\n${cast}`,
+    ].filter(Boolean).join('\n\n') }, { type: 'input_image', image_url: `data:image/png;base64,${(await fsp.readFile(file)).toString('base64')}`, detail: 'high' }] }];
+    const { parsed: r } = await llmJson('book_page_proof', PROOF_INSTRUCTIONS, input, PROOF_SCHEMA, { type: 'book_page_proof', bookId: id, page: label }, () => {}, 'low');
+    const issues = [...(r.textProblems || []).map((x) => `Text: “${x.expected}” → ${x.found}`), ...(r.extraText || []).map((x) => `Extra text: “${x}”`), ...(r.pictureProblems || []).filter((x) => x.severity === 'major').map((x) => x.issue)].map((x) => clampStr(x, 400));
+    const notes = (r.pictureProblems || []).filter((x) => x.severity !== 'major').map((x) => clampStr(x.issue, 400));
+    const check = { imageId: recId, pass: issues.length === 0, issues, notes, fixNotes: issues.length ? [...issues, ...notes].join('\n') : '', at: new Date().toISOString() };
+    await withBook(id, (b) => { const p = b.pages.find((x) => x.id === pageId); if (p && p.imageId === recId) p.check = check; return b; });
+    await appendLog({ type: 'book_page_proof', bookId: id, page: label, recordId: recId, pass: check.pass, issues });
+    return check;
+  }
+
+  // body.fixNotes: mistakes of an earlier attempt to avoid. Otherwise, when proofreading is on (book.image.proof, or
+  // body.proof), the picture is checked and redrawn once if it fails; the attempt with fewer problems stays selected.
+  async function handlePageImage(id, pageId, body = {}) {
+    const first = await drawPage(id, pageId, clampStr(body.fixNotes, 2000));
+    const proof = 'proof' in body ? Boolean(body.proof) : first.book.image.proof !== false;
+    if (!proof || first.book.fromSeries || !deps.recordFile) return first;
+    const records = [first.record];
+    let check = await checkPage(id, pageId, first.record.id).catch(() => null);
+    if (check && !check.pass) {
+      const second = await drawPage(id, pageId, check.fixNotes).catch(() => null);
+      if (second) {
+        records.push(second.record);
+        const check2 = await checkPage(id, pageId, second.record.id).catch(() => null);
+        // Keep whichever attempt has fewer problems selected; both stay as versions of the page.
+        if (check2 && !check2.pass && check2.issues.length > check.issues.length) await withBook(id, (b) => { const p = b.pages.find((x) => x.id === pageId); if (p) { p.imageId = first.record.id; p.check = check; } return b; });
+        else check = check2;
+      }
+    }
+    const book = await getBook(id);
+    const chosen = book.pages.find((p) => p.id === pageId)?.imageId;
+    return { book, record: records.find((r) => r.id === chosen) || records[records.length - 1], records, check };
+  }
+  async function drawPage(id, pageId, fixNotes = '') {
     const book = await getBook(id);
     const page = book.pages.find((p) => p.id === pageId);
     if (!page) throw new HttpError(404, 'Page not found.');
     if (!page.illustration && !page.beat) throw new HttpError(400, 'This page needs an illustration brief first.');
     const all = await readCharacters();
     const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
-    const prompt = page.imagePrompt || pagePrompt(book, page);      // the prompt reviewed in the Picture prompts step, if there is one
+    const prompt = withFix(page.imagePrompt || pagePrompt(book, page), fixNotes);      // the prompt reviewed in the Picture prompts step, if there is one
     const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${book.title} — ${label}: ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, n: 1, format: 'png',
@@ -558,10 +758,10 @@ export function createBooks(deps) {
     const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — ${label}` });
     const updated = await withBook(id, (b) => {
       const p = b.pages.find((x) => x.id === pageId);
-      if (p) { p.imageIds = [...(p.imageIds || []), rec.id]; p.imageId = rec.id; }
+      if (p) { p.imageIds = [...(p.imageIds || []), rec.id]; p.imageId = rec.id; p.check = null; }
       return b;
     });
-    await appendLog({ type: 'book_page_image', bookId: id, page: label, recordId: rec.id, characterIds, costUsd: rec.costUsd });
+    await appendLog({ type: 'book_page_image', bookId: id, page: label, recordId: rec.id, characterIds, fix: Boolean(fixNotes), costUsd: rec.costUsd });
     return { book: updated, record: rec };
   }
 
@@ -607,7 +807,7 @@ Constraints:
     await fsp.mkdir(BOOKS_DIR, { recursive: true });
     const now = new Date().toISOString();
     const book = { id: crypto.randomUUID(), createdAt: now, updatedAt: now, stage: 'brief', brief: cleanBrief(body.brief),
-      title: '', logline: '', theme: '', styleGuide: '', world: '', storyline: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), cast: [], pages: [], image: cleanImage(body.image) };
+      title: '', logline: '', theme: '', styleGuide: '', world: '', storyline: Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), cast: [], pages: [], logic: null, image: cleanImage(body.image) };
     await writeJsonAtomic(bookFile(book.id), book);
     await appendLog({ type: 'book_created', bookId: book.id, premise: book.brief.premise });
     return book;
@@ -644,6 +844,7 @@ Constraints:
         b.pages.push(newPage('page', n + 1));
         b.pages.sort((x, y) => x.n - y.n);
         b.brief.pageCount = pages.length + 1;
+        b.logic = null;      // the reader's findings name pages by number
       }
       if (body.removePage) {
         const i = b.pages.findIndex((p) => p.id === body.removePage && p.kind === 'page');
@@ -652,6 +853,7 @@ Constraints:
           const [gone] = b.pages.splice(i, 1);
           for (const p of b.pages) if (p.kind === 'page' && p.n > gone.n) p.n--;
           b.brief.pageCount = b.pages.filter((p) => p.kind === 'page').length;
+          b.logic = null;
         }
       }
       return b;
@@ -705,7 +907,7 @@ Constraints:
     for (const p of b.pages) {
       out.push(p.kind === 'cover' ? '## Cover' : `## Page ${p.n}${p.arc ? ` · ${arcLabel(p.arc)}` : ''}`, img(p));
       if (p.text) out.push(p.text, '');
-      const meta = [p.beat && `Beat: ${p.beat}`, p.purpose && `Purpose: ${p.purpose}`, p.characters.length && `Characters: ${p.characters.join(', ')}`, p.setting && `Setting: ${p.setting}`, p.emotion && `Feeling: ${p.emotion}`, p.continuity && `Carries over: ${p.continuity}`].filter(Boolean);
+      const meta = [p.beat && `Beat: ${p.beat}`, p.purpose && `Purpose: ${p.purpose}`, p.characters.length && `Characters: ${p.characters.join(', ')}`, p.setting && `Setting: ${p.setting}`, p.emotion && `Feeling: ${p.emotion}`, p.continuity && `Carries over: ${p.continuity}`, p.state && `State at the end: ${p.state}`].filter(Boolean);
       if (p.kind === 'page' && meta.length) out.push(...meta.map((m) => `- ${m}`), '');
       out.push(`> Illustration: ${p.illustration || p.beat || '—'}`, '');
     }
@@ -741,7 +943,9 @@ Constraints:
     else if (req.method === 'POST' && a === 'details') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleDetails(id, progress))); }
     else if (req.method === 'POST' && a === 'undo') send(res, 200, pub(await handleUndo(id)));
     else if (req.method === 'POST' && a === 'prompts') send(res, 200, pub(await handlePrompts(id, await readJson(req))));
-    else if (req.method === 'POST' && a === 'pages' && c === 'image') send(res, 200, pub(await handlePageImage(id, b)));
+    else if (req.method === 'POST' && a === 'logic') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleLogic(id, progress))); }
+    else if (req.method === 'POST' && a === 'pages' && c === 'image') send(res, 200, pub(await handlePageImage(id, b, await readJson(req).catch(() => ({})))));
+    else if (req.method === 'POST' && a === 'pages' && c === 'check') { const check = await checkPage(id, b); send(res, 200, { check, book: publicBook(await getBook(id)) }); }
     else if (req.method === 'POST' && a === 'cast' && c === 'design') send(res, 200, pub(await handleDesignCast(id, b)));
     else if (req.method === 'GET' && a === 'prompt' && b) { const book = await getBook(id); const page = book.pages.find((x) => x.id === b); if (!page) throw new HttpError(404, 'Page not found.'); send(res, 200, { prompt: pagePrompt(book, page) }); }
     else if (req.method === 'GET' && a === 'images.zip') {

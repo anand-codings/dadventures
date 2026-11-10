@@ -8,7 +8,7 @@ const els = {
   bookSelect: $('book-select'), newBook: $('new-book'), deleteBook: $('delete-book'),
   briefBox: $('brief-box'), suggest: $('suggest'), ideas: $('ideas'),
   premise: $('premise'), audience: $('audience'), pageCount: $('page-count'), tone: $('tone'), themeBrief: $('theme-brief'), style: $('style'), briefNotes: $('brief-notes'), briefChars: $('brief-chars'),
-  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'),
+  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'), proof: $('proof'), logic: $('logic'), checkLogic: $('check-logic'), logicBox: $('logic-box'),
   stepper: $('stepper'), next: $('next'), stop: $('stop'), undo: $('undo'), saveState: $('save-state'), status: $('status'), strip: $('strip'), topbar: $('topbar-meta'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
   empty: $('empty'), book: $('book'), editor: $('editor'), title: $('title'), logline: $('logline'), theme: $('theme'), styleGuide: $('style-guide'),
@@ -73,8 +73,9 @@ const storyPages = () => (book ? book.pages.filter((p) => p.kind === 'page') : [
 const pageLabel = (p) => (p.kind === 'cover' ? 'Cover' : `Page ${p.n}`);
 const audience = () => config.books.ageBands.find((a) => a.id === (book?.brief.audience || els.audience.value)) || config.books.ageBands[1];
 // Planning notes every story page should have before its text and picture are made.
-const PLAN_FIELDS = [['beat', 'what happens'], ['arc', 'arc stage'], ['purpose', 'purpose'], ['setting', 'setting'], ['emotion', 'feeling']];
-const planGaps = (p) => PLAN_FIELDS.filter(([k]) => !p[k]).length;
+const PLAN_FIELDS = [['beat', 'what happens'], ['arc', 'arc stage'], ['purpose', 'purpose'], ['setting', 'setting'], ['emotion', 'feeling'], ['state', 'where things stand']];
+// A Flash Cards copy is read-only here and may have no state: do not count that as a blank to fill in.
+const planGaps = (p) => PLAN_FIELDS.filter(([k]) => !p[k] && !(k === 'state' && book?.fromSeries)).length;
 const outlineGaps = () => storyPages().reduce((n, p) => n + planGaps(p), 0) + (book ? config.books.storyline.filter((f) => !storyline()[f.id]).length + (book.world || !config.books.storyline.length ? 0 : 1) : 0);
 // A server started before the outline carried planning notes sends books without them; treat those as blank.
 const storyline = () => (book.storyline ||= {});
@@ -240,7 +241,7 @@ async function deleteBook() {
 function briefFromForm() {
   return { premise: els.premise.value, audience: els.audience.value, pageCount: Number(els.pageCount.value) || 12, tone: els.tone.value, theme: els.themeBrief.value, setting: els.setting.value, style: els.style.value, notes: els.briefNotes.value, characterIds: [...briefChars] };
 }
-const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked });
+const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked, proof: els.proof.checked });
 // Create the book on its first AI step, or save the brief and settings of the open one.
 async function ensureBook() {
   if (book) { queue({ brief: briefFromForm(), image: imageFromForm() }); await flush(); return book; }
@@ -349,7 +350,7 @@ function renderAll() {
     els.premise.value = b.brief.premise; els.audience.value = b.brief.audience; els.pageCount.value = b.brief.pageCount;
     els.tone.value = b.brief.tone; els.themeBrief.value = b.brief.theme; els.setting.value = b.brief.setting || ''; els.style.value = b.brief.style; els.briefNotes.value = b.brief.notes;
     briefChars.clear(); for (const id of b.brief.characterIds) briefChars.add(id);
-    els.imgModel.value = b.image.model; els.imgQuality.value = b.image.quality; els.textInImage.checked = b.image.textInImage;
+    els.imgModel.value = b.image.model; els.imgQuality.value = b.image.quality; els.textInImage.checked = b.image.textInImage; els.proof.checked = b.image.proof !== false;
     if (![...els.imgSize.options].some((o) => o.value === b.image.size)) fillSelect(els.imgSize, [...config.sizePresets, { id: b.image.size, label: b.image.size }], b.image.size);
     els.imgSize.value = b.image.size;
   }
@@ -444,6 +445,7 @@ function renderPages() {
         ${img ? `<a href="${imageUrl(p.imageId, false)}" target="_blank" rel="noopener"><img src="${img}" alt=""></a>` : `<div class="art-empty">${pageLabel(p)}<br><span class="hint">no picture yet</span></div>`}
         ${variants}
         <button class="btn secondary small p-image" type="button">${p.imageId ? '🎨 Try another picture' : '🎨 Illustrate'}</button>
+        ${img && !book.fromSeries ? proofHtml(p) : ''}
       </div>
       <div class="page-body">
         <div class="page-head">
@@ -504,6 +506,8 @@ function renderPages() {
     q('.p-add')?.addEventListener('click', () => structural({ addPageAfter: p.n }, `Added a page after page ${p.n}.`));
     q('.p-rm')?.addEventListener('click', () => structural({ removePage: p.id }, `Removed page ${p.n}.`));
     q('.p-image').addEventListener('click', () => illustrate(p).catch(() => {}));
+    q('.p-fix')?.addEventListener('click', () => illustrate(p, false, { fixNotes: p.check?.fixNotes || '' }).catch(() => {}));
+    q('.p-proof')?.addEventListener('click', () => proofread(p, q('.p-proof')));
     q('.p-prompt').addEventListener('click', async () => {
       const pre = q('.p-prompt-text');
       if (!pre.hidden) { pre.hidden = true; return; }
@@ -517,6 +521,74 @@ function renderPages() {
     els.pages.appendChild(card);
   }
   refreshFlow();
+}
+
+// What the proofreader said about the picture now chosen for a page (a result for another version is not shown).
+function proofHtml(p) {
+  const c = p.check && p.check.imageId === p.imageId ? p.check : null;
+  if (!c) return '<button class="link p-proof" type="button" title="A second reader looks at the picture next to the page: who is in it and who should not be, where the story says everyone is, and any stray lettering">🔍 Proofread</button>';
+  const notes = c.notes || [];
+  if (c.pass) return `<span class="proof ok" title="${escapeHtml(notes.join(' · '))}">✓ Proofread: matches the page${notes.length ? ` · ${notes.length} small note${notes.length === 1 ? '' : 's'}` : ''}</span>`;
+  return `<div class="proof bad" style="text-align:left">⚠ Proofreader:<ul>${c.issues.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul><button class="mini p-fix" type="button" title="Draw the picture again with these mistakes listed as things to avoid (a paid picture)">🎨 Redraw fixing these</button></div>`;
+}
+async function proofread(p, btn) {
+  if (busy) return;
+  await flush();
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Proofreading…';
+  try { const r = await api('POST', `/api/books/${book.id}/pages/${p.id}/check`); book = r.book; renderPages(); }
+  catch (e) { btn.disabled = false; btn.textContent = '🔍 Proofread'; setStatus(`Proofreading failed: ${escapeHtml(e.message)}`, 'error'); }
+}
+
+// ---------- continuity reader: what does not add up in the plan or the written story ----------
+// Each finding names its pages and can be handed to the writer: written pages are rewritten, planned ones go to the re-draft box.
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const holeText = (h) => `A continuity reader found this problem: ${h.problem} Fix it this way, changing as little else as possible: ${h.fix}`;
+function renderLogic() {
+  els.logicBox.hidden = Boolean(book.fromSeries);
+  const l = book.logic;
+  if (!l) { els.logic.innerHTML = '<div class="hint">Not read yet. The reader goes through the plan (and the text and picture briefs, once written) asking “but why?”.</div>'; return; }
+  const what = l.stage === 'script' ? 'written story' : 'plan';
+  const head = l.holes.length
+    ? `<b>Continuity reader:</b> ${plural(l.holes.length, 'thing')} in the ${what} ${l.holes.length === 1 ? 'does' : 'do'} not add up yet${l.fixed ? ` (the editor already fixed ${l.fixed} of ${l.found})` : ''}.`
+    : `<span class="proof ok">✓ Continuity reader: the ${what} adds up${l.fixed ? ` (the editor fixed ${plural(l.fixed, 'hole')} first)` : ''}.</span>`;
+  els.logic.innerHTML = `<div>${head}</div>` + l.holes.map((h) => {
+    const written = h.pages.length && h.pages.every((n) => storyPages().find((p) => p.n === n)?.text);
+    return `<div class="hole ${escapeHtml(h.severity)}" data-hole="${escapeHtml(h.id)}"><div><b>${h.pages.length ? `Page${h.pages.length === 1 ? '' : 's'} ${h.pages.join(', ')}` : 'Whole story'}</b> · ${escapeHtml(h.problem)}</div><div class="fix">Smallest fix: ${escapeHtml(h.fix)}</div>
+      <div class="row"><button class="mini" data-fix-hole type="button">${written ? `Rewrite ${h.pages.length === 1 ? 'this page' : 'these pages'} to fix it` : 'Re-draft the outline to fix it…'}</button></div></div>`;
+  }).join('');
+}
+async function checkLogic() {
+  if (busy) return;
+  setBusy(true);
+  const onProgress = showProgress('Reading the story for things that do not add up');
+  try {
+    await flush();
+    const r = await streamApi(`/api/books/${book.id}/logic`, {}, onProgress);
+    book = r.book; hideProgress(); renderAll();
+    const n = r.logic.holes.length;
+    setStatus(n ? `The continuity reader found ${plural(n, 'thing')} that ${n === 1 ? 'does' : 'do'} not add up. See the Outline tab.` : 'The continuity reader found nothing that does not add up.', n ? 'error' : 'ok');
+  } catch (e) { hideProgress(); setStatus(`The continuity reader failed: ${escapeHtml(e.message)}`, 'error'); }
+  finally { setBusy(false); }
+}
+async function fixHole(h) {
+  if (busy) return;
+  const pages = h.pages.map((n) => storyPages().find((p) => p.n === n)).filter(Boolean);
+  if (!pages.length || pages.length < h.pages.length || pages.some((p) => !p.text)) {
+    // Not written yet (or about the whole story): the fix belongs in the plan, so hand it to the re-draft box.
+    els.outlineInstructions.value = `${holeText(h)} Keep everything else as it is.`.slice(0, 2000);
+    els.outlineInstructions.scrollIntoView({ behavior: 'smooth', block: 'center' }); els.outlineInstructions.focus();
+    setStatus('The finding is in the re-draft box below. ↻ Re-draft outline rewrites the plan with it (the page text is written again afterwards).', 'ok');
+    return;
+  }
+  setBusy(true);
+  const onProgress = showProgress(`Rewriting page${pages.length === 1 ? '' : 's'} ${h.pages.join(', ')}`);
+  try {
+    await flush();
+    book = await streamApi(`/api/books/${book.id}/scripts`, { pageIds: pages.map((p) => p.id), instructions: `${holeText(h)} Keep each page's state true and make every illustration brief agree with it.`.slice(0, 2000) }, onProgress);
+    hideProgress(); renderAll();
+    setStatus(`Rewrote page${pages.length === 1 ? '' : 's'} ${h.pages.join(', ')} to fix it. 🔎 Check the story adds up reads it again; ↶ Undo restores the old text.`, 'ok');
+  } catch (e) { hideProgress(); setStatus(`Rewrite failed: ${escapeHtml(e.message)}`, 'error'); }
+  finally { setBusy(false); }
 }
 
 // ---------- outline: the plan for every page ----------
@@ -549,7 +621,7 @@ function renderArcBar() {
   els.arcLegend.innerHTML = config.books.arcStages.map((a) => { const n = pages.filter((p) => p.arc === a.id).length; return n ? `<span class="arc-key arc-${a.id}" title="${escapeHtml(a.hint)}"><i></i>${escapeHtml(a.label)} · ${n}</span>` : ''; }).join('');
 }
 function renderOutline() {
-  renderStoryline(); renderArcBar();
+  renderStoryline(); renderArcBar(); renderLogic();
   els.outline.innerHTML = '';
   for (const p of book.pages) {
     const isCover = p.kind === 'cover';
@@ -562,6 +634,7 @@ function renderOutline() {
           <div class="ol-top"><select class="o-arc" title="Where this page sits on the story arc"><option value="">Arc stage…</option>${config.books.arcStages.map((a) => `<option value="${a.id}">${escapeHtml(a.label)}</option>`).join('')}</select><div class="ol-chars"></div><span class="spacer"></span><button class="mini o-add" type="button" title="Insert a blank page after this one">+ Add page after</button><button class="mini danger o-rm" type="button" title="Delete this page (↶ Undo brings it back)">Delete page</button></div>
           <label class="field"><span>What happens</span><textarea class="o-beat" rows="2" placeholder="What happens on this page, in a sentence or two"></textarea></label>
           <label class="field"><span>Why this page matters</span><textarea class="o-purpose" rows="1" placeholder="What it sets up, pays off or changes"></textarea></label>
+          <label class="field"><span>Where things stand at the end <span class="hint">facts every picture must agree with</span></span><textarea class="o-state" rows="2" placeholder="Who is where (and who cannot be seen), who holds what, what is stuck, blocked or open, the light"></textarea></label>
         </div>
         <div class="ol-side">
           <label class="field"><span>Setting</span><textarea class="o-setting" rows="1" placeholder="Place, time of day, weather"></textarea></label>
@@ -570,7 +643,7 @@ function renderOutline() {
         </div>`);
     row.querySelector('.o-add')?.addEventListener('click', () => structural({ addPageAfter: p.n }, `Added a blank page after page ${p.n}.`));
     row.querySelector('.o-rm')?.addEventListener('click', () => { if (confirm(`Delete page ${p.n}? Its picture stays in History, and ↶ Undo brings the page back.`)) structural({ removePage: p.id }, `Deleted page ${p.n}.`); });
-    for (const k of isCover ? ['illustration'] : ['beat', 'purpose', 'setting', 'emotion', 'continuity']) {
+    for (const k of isCover ? ['illustration'] : ['beat', 'purpose', 'setting', 'emotion', 'continuity', 'state']) {
       const el = row.querySelector(`.o-${k}`);
       const required = PLAN_FIELDS.some(([f]) => f === k);
       el.value = p[k] || ''; if (required) el.classList.toggle('gap', !el.value.trim());
@@ -744,7 +817,7 @@ function renderScript() {
       return `<div class="script-page arc-${st ? st.id : 'none'}">
         <h4>${pageLabel(p)}${st ? `<span class="chip">${e(st.label)}</span>` : ''}${p.imageId ? '' : '<span class="hint">no picture yet</span>'}</h4>
         ${isCover ? `<div class="said">${e(book.title)}</div>` : `<div class="said${p.text ? '' : ' none'}">${p.text ? e(p.text) : 'Text not written yet.'}</div>`}
-        <dl>${row('What happens', p.beat)}${row('Why it matters', p.purpose)}${row('Characters', p.characters.join(', '))}${row('Setting', p.setting)}${row('Feeling', p.emotion)}${row('Carries over', p.continuity)}${row('Picture', p.illustration)}</dl>
+        <dl>${row('What happens', p.beat)}${row('Why it matters', p.purpose)}${row('Characters', p.characters.join(', '))}${row('Setting', p.setting)}${row('Feeling', p.emotion)}${row('Carries over', p.continuity)}${row('Where things stand', p.state)}${row('Picture', p.illustration)}</dl>
       </div>`;
     }),
   ].join('');
@@ -902,7 +975,7 @@ async function rewritePage(p, card, instructions) {
   finally { setBusy(false); }
 }
 
-async function illustrate(p, inBatch = false) {
+async function illustrate(p, inBatch = false, body) {
   if (!inBatch) { if (busy) return; setBusy(true); }
   const card = () => els.pages.querySelector(`[data-id="${p.id}"]`);
   const c0 = card();
@@ -914,13 +987,17 @@ async function illustrate(p, inBatch = false) {
   tick(); const t = setInterval(tick, 1000);
   if (c0) c0.querySelector('.p-image').disabled = true;
   try {
-    const r = await api('POST', `/api/books/${book.id}/pages/${p.id}/image`);
+    const r = await api('POST', `/api/books/${book.id}/pages/${p.id}/image`, body);
+    // With proofreading on, a picture that fails is redrawn once: both attempts come back and both were paid for.
+    const made = r.records || [r.record];
+    for (const x of made) records.set(x.id, x);
     records.set(r.record.id, r.record); book = r.book;
+    const spent = made.reduce((n, x) => n + (x.costUsd || 0), 0);
     clearInterval(t);
     if (!reading) renderPages(); else renderPreview();
     const s2 = card()?.querySelector('.p-status');
-    if (s2) { s2.className = 'status p-status ok'; s2.textContent = `Done in ${Math.round((Date.now() - t0) / 1000)}s${r.record.costUsd ? ` · ${fmtCost(r.record.costUsd)}` : ''}.`; }
-    return r.record;
+    if (s2) { s2.className = 'status p-status ok'; s2.textContent = `Done in ${Math.round((Date.now() - t0) / 1000)}s${spent ? ` · ${fmtCost(spent)}` : ''}${made.length > 1 ? ' · redrawn once after proofreading' : ''}.`; }
+    return { ...r.record, costUsd: spent || r.record.costUsd };
   } catch (e) {
     clearInterval(t); c0?.classList.remove('working');
     if (st) { st.className = 'status p-status error'; st.textContent = `Picture failed: ${e.message}`; }
@@ -1082,6 +1159,12 @@ async function init() {
   els.readText.addEventListener('change', () => { localStorage.setItem(READ_TEXT_KEY, els.readText.value); if (book && reading) renderPreview(); });
   els.fillBrief.addEventListener('click', fillBrief);
   els.fillDetails.addEventListener('click', fillDetails);
+  els.checkLogic.addEventListener('click', checkLogic);
+  els.logic.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-fix-hole]')) return;
+    const h = book.logic?.holes.find((x) => x.id === e.target.closest('[data-hole]').dataset.hole);
+    if (h) fixHole(h);
+  });
   els.world.addEventListener('input', () => { book.world = els.world.value; els.world.classList.toggle('gap', !els.world.value.trim()); queue({ world: els.world.value }); });
   els.deleteBook.addEventListener('click', deleteBook);
   els.next.addEventListener('click', () => nextAction().run());
@@ -1103,7 +1186,7 @@ async function init() {
   els.premise.addEventListener('input', () => { els.suggest.textContent = els.premise.value.trim() ? '✨ Develop this idea' : '✨ Suggest ideas'; refreshFlow(); });
   for (const el of [els.premise, els.tone, els.themeBrief, els.setting, els.style, els.briefNotes, els.pageCount]) el.addEventListener('input', () => { renderBriefGaps(); if (book) queue({ brief: briefFromForm() }); });
   els.audience.addEventListener('change', () => { if (book) { queue({ brief: briefFromForm() }); book.brief.audience = els.audience.value; if (book.pages.length && !reading) renderPages(); } });
-  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage]) el.addEventListener('change', () => { renderArtSummary(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); refreshFlow(); } });
+  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage, els.proof]) el.addEventListener('change', () => { renderArtSummary(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); refreshFlow(); } });
   els.title.addEventListener('input', () => queue({ title: els.title.value }));
   els.logline.addEventListener('input', () => { queue({ logline: els.logline.value }); els.headLogline.textContent = els.logline.value; });
   els.theme.addEventListener('input', () => queue({ theme: els.theme.value }));
