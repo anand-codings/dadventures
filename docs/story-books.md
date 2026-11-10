@@ -35,6 +35,46 @@ illustrated.
    **🎨 Design character** turns a text-only cast member into a studio character (one 1024² design on white), so later pages
    use it as a reference. Re-illustrating keeps every version; click a thumbnail to choose.
 
+**Read-aloud craft and picture consistency.**
+- **Refrain and device** are their own fields in the Outline tab (the outline proposes them; blank means none). The writer
+  prints the refrain word for word; the editor restores accidental variations.
+- Every page plans its **shot** (wide, medium, close-up), what the **eye lands on** first and, where it has one, a
+  **page-turn hook** the next page answers. The row of letters under the story arc shows the rhythm of the shots and marks
+  a third page in a row at the same distance.
+- A **read-aloud editor** goes through the whole text after it is written (and on demand: **🎧 Read-aloud edit**,
+  `POST /api/books/:id/edit`): word range, breath and rhythm, the refrain, page turns, words that only repeat the picture.
+  It changes words, never the story; a change that moves a page further outside the word range is refused; what it changed
+  is listed above the pages and ↶ Undo restores the text. A partial rewrite calls it only for pages that came back outside
+  the range. Pages still outside the range are named next to the page count.
+- **Reference pictures** (Pictures → Consistency, on by default): each new picture is drawn with the nearest finished page
+  set in the same place beside it (pages whose picture failed proofreading are skipped), or failing that the nearest
+  finished page as a style reference. **☆ Use as style anchor** pins one page as the style for all the others.
+  **🎨 Draw the world sheet** (Outline tab, `POST /api/books/:id/world-sheet`, one paid 1024² picture) draws the places and
+  recurring objects of the world note without characters; it is then sent with every page. References are dropped, never
+  the picture, when there is no room left after the character references.
+- **Each fact once in the prompt**: when the picture brief already names the place the Setting line is left out, and the
+  carry-over line is left out when the page has story facts. Briefs no longer repeat the art style or the look of recurring
+  objects, and sentences about word counts or reading aloud are filtered out of the style line. Prompts stored before this
+  change show as out of date until rewritten.
+- The writer chooses **where the text sits** from the composition (the emptiest side) instead of defaulting to the bottom.
+
+**Story consistency** (ported from Flash Cards). Every page also carries a **state**: where everyone and everything is at
+the end of the page (who is where and who cannot be seen, who holds what, what is blocked or open, the light), carried forward
+until a page changes it. The outline is written to five story-logic rules (the obvious way out is visibly closed, abilities
+are honest, nobody arrives by coincidence, one of each device, whereabouts carry forward), then a **continuity reader**
+goes through it for what does not add up; if it finds holes the outline is revised once and read again, and whatever is
+still open is listed in the Outline tab with the smallest fix and a button that rewrites the named pages (or prefills the
+re-draft box when they are not written yet). **🔎 Check the story adds up** (`POST /api/books/:id/logic`) re-reads the book as
+it stands, including page text and illustration briefs. Illustration briefs are 60–110 words in a fixed order (place, who is
+where, what each is doing and feeling, the state of every important object, camera) and must agree with the state; each
+picture prompt adds the **story facts** (the previous page's state and this page's) and an explicit "In this picture / NOT in
+this picture" list. After a picture is drawn a **proofreader** (a vision call, `POST /api/books/:id/pages/:pageId/check`)
+compares it with the page: characters present or wrongly present, anyone drawn where the state says they cannot be, the key
+object drawn in a state that undoes the problem, stray or wrong lettering, the cover title. A failing picture is redrawn
+once with the mistakes listed (a second paid picture) and the attempt with fewer problems stays selected; the result shows
+under the picture (✓ or ⚠ with **Redraw fixing these**). Switch it off with **Proofread** in Brief & settings
+(`image.proof`). Books copied from Flash Cards skip both readers.
+
 Illustrations are normal History records titled `<book> — page N` and tagged `book`, `<book-slug>`, `page-N`. **📖 Preview**
 shows the book as pages (and prints one page per sheet); **⬇ Manuscript** exports Markdown with text, briefs and image paths.
 Books are stored as `output/books/<id>.json`; deleting a book keeps its images. Outline, script and illustration events are

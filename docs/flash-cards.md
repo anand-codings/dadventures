@@ -39,6 +39,29 @@ engaged each story card has its own **setting and colour palette**, a **play pro
 series **refrain** on its bottom ribbon and a tiny **hidden friend** to spot. The built-in **Toddler story — mixed layouts**
 template lets the planner pick a layout per card (full-page splash, two, three or four panels), never the same twice in a row.
 
+**Stories that add up.** Three things keep a story and its pictures consistent. (1) A **continuity reader** goes through the
+plan before and after the story editor, and through the finished script, asking "but why?": the obvious way out that nothing
+closes, a helper doing what the hero just failed at, someone turning up by coincidence, a character in two places, words that
+disagree with the picture briefs. What is still open is listed in the story box, each finding with **Rewrite these cards to
+fix it**; **🔎 Check the story adds up** re-runs it at any time. (2) Every story card has a **state**: where everyone and
+everything is at the end of that card (who is where and who cannot be seen, who holds what, what is blocked or open). It is
+planned with the story, editable on the card, sent with every picture and given to the proofreader. (3) Every story panel has
+a full **picture brief** (where, who is where, what each is doing, the state of the important things, camera) and a list of
+**who is drawn in it**; everyone else is named as not in the picture. A proofread picture that shows a character where the
+state says it cannot be (outside when it is trapped inside) fails, however small. Stories written before this get their state
+and panel lists read off the script the first time a card is proofread or drawn.
+
+**Keeping pictures on the story.** The series reference sent with each picture is the nearest finished card in the same place
+whose picture passed proofreading (not always the first card, whose cast and props leaked into later pictures). Each place can
+carry **fixtures** — the objects the plot depends on, in the state the story first finds them — which are painted into its
+reference picture; **↻ Repaint** on a place thumbnail paints it again. Cards that must show someone trapped or hidden are
+planned as one picture (two panels at most) with a single way of looking inside. The hidden friend is assigned to one named
+panel per card, and the refrain gives way to a fitting variation on cards where its promise is visibly not happening. When the
+proofreader fails a picture because its brief was too thin, the brief is filled in and the card redrawn automatically (up to
+three pictures per card; turn off *fill in the brief and redraw without asking* to decide each time). Draft sketches are
+proofread too, for who is where only. **📖 Read the story back from the pictures** shows every finished picture to a reader who
+has not seen the script, and lists the cards where the pictures tell a different story from the words.
+
 **Checking and finishing a story.** With *Proofread every card* on (Picture settings), each new picture is read by a vision
 model against its script: every lettered word, who is in each panel, the hidden friend. Story-breaking problems trigger one
 automatic redraw; anything still wrong is shown on the card with ⚠ and a *Redraw fixing these* button, and small
