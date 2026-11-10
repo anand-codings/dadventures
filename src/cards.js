@@ -140,6 +140,8 @@ Longer stories (STORY with nine or more cards) — a long story needs more than 
 Variety (STORY only) — young children lose interest when every card looks and feels the same, so make each card a small surprise inside a familiar frame:
 - setting: every card happens in a different place within the same world and has its own dominant colour palette and light (name two or three colours). Make the palettes clearly different from card to card (in a short story consecutive cards use different hue families, e.g. blue, then coral-orange, then green, then gold, then purple; a long story follows the chapter rule above; never three near-identical cards in a row) and let them progress with the journey; the world, the cast and the theme stay the same.
 - layout: when layouts are offered, choose the one that suits each beat. Never use the same layout on two cards in a row; give the biggest surprise or reveal a full-page splash.
+- Hard pictures get fewer panels. A card whose picture must show someone trapped, hidden or inside something (so that inside and outside are seen together) is the easiest to draw wrong: give it the one-picture layout, or two panels at most, and this outranks the rule about not repeating a layout. Decide ONE way of looking inside (for example "a cutaway side view, as if the rock were sliced open") and write it into "world"; every picture that looks inside uses that same view.
+- places.fixtures: for each place, the objects there that the plot depends on, in the exact state they are in when the story first arrives (a stone wedged across a low entrance leaving a gap one hand high; a net hooked over a forked stalk). They are painted into the place's reference picture, so be exact about position and size.
 - beat: vary what happens and how the main character feels (curious, startled, giggling, a little worried, proud, sleepy). Do not repeat one pattern (such as "meets an animal and says hello") card after card. The main cast stays; new side characters may come and go.
 - play: give each card one play type (find, count, move, sound, guess), never the same type twice in a row.
 - refrain: a short, bouncy chant a child can join in with on every card.
@@ -163,7 +165,8 @@ Check each point and rewrite whatever fails:
 10. Simplicity: can a four-year-old retell the plot in three sentences, and understand every card from its picture alone? Replace anything that needs explaining (signals, rules, timing, clever mechanisms, abstract obstacles) with a plain physical problem and a plain physical fix. Cut repeated beats that differ only in detail. Simplifying is more important than keeping the writer's ideas.
 11. Tone: still gentle, warm, funny in places and right for the stated age; the tension is felt but never frightening.
 12. Story logic: when a continuity reader's findings are attached, fix every one with the smallest change that makes the story add up (close the obvious way out visibly, give the helper a job only its body can do, introduce a helper earlier, merge a repeated device, rename a second thing). Never fix a hole by adding an explanation in words: change what happens or what is seen.
-13. State: after your changes, rewrite every card's "state" so it is true for the revised story and carries forward card to card without a jump.
+13. Hard pictures: a card that must show someone trapped, hidden or inside something has one picture, or two panels at most, and every look inside uses the single view named in "world". Each place's "fixtures" match the story as revised.
+14. State: after your changes, rewrite every card's "state" so it is true for the revised story and carries forward card to card without a jump.
 
 Keep the title, cast names, number of cards, and each card's layout, setting and play type unless changing them clearly improves the story. Keep it concrete and drawable. In "editorNotes" list in plain words the two to four most important things you strengthened (or "No changes needed" if the plan already passed every point).`;
 
@@ -192,7 +195,7 @@ const planSchema = (count, variantIds = []) => obj({
   foundation: obj({ lesson: str(), want: str(), flaw: str(), challenge: str(), stakes: str(), failedTry: str(), turningChoice: str(), change: str() }),
   spine: str('STORY only: the whole story told in 5–7 short sentences following the story-spine pattern; "" for a set'),
   world: str('STORY only: places and important objects; "" for a set'),
-  places: { type: 'array', description: 'STORY only: the three to six distinct places the story visits; empty for a set', items: obj({ name: str('short, e.g. "The rock hollow"'), description: str('landmarks, shapes and plants an illustrator must keep the same every time; no characters; 20–40 words') }) },
+  places: { type: 'array', description: 'STORY only: the three to six distinct places the story visits; empty for a set', items: obj({ name: str('short, e.g. "The rock hollow"'), description: str('landmarks, shapes and plants an illustrator must keep the same every time; no characters; 20–40 words'), fixtures: str('objects here the plot depends on, in the state the story first finds them, with position and size; "" when none') }) },
   editorNotes: str('leave "" unless you are the editor revising a plan'),
   refrain: str('STORY only: a 3–7 word chant that returns on every card; "" for a set'),
   hiddenFriend: str('STORY only: a tiny creature or object hidden once in every picture for the child to spot (what it is and its colours, under 15 words); "" for a set'),
@@ -227,7 +230,7 @@ Rules:
 - In a STORY series the cards read in order: keep names, facts and tone continuous, let captions and speech carry the story from where the previous card stopped, and make the final slot or closing line of every card except the last lead into the next one. Refer to cast members by name only in "hero" and "visual" (their look is supplied separately).
 - In a SET each card stands alone but uses parallel wording and structure so the series feels like a family.
 - When a card has a setting, set its pictures there and use its colours; when it has a play type, the play slot follows that type, and anything the child is asked to find or count must be described, in exactly that number, in that card's picture descriptions. Do not mention the hidden friend anywhere (it is added to the pictures automatically).
-- If the series has a refrain, use it exactly as the template's closing guidance says.
+- If the series has a refrain, use it exactly as the template's closing guidance says. One exception, which overrides the template: on a card where what the refrain promises is visibly not happening (the one being taken home is lost, stuck or out of reach; the lowest moment), the bottom line is a short variation in the same rhythm that fits the moment ("Hold on, little one!"), never the cheerful refrain unchanged.
 - STORY craft: dramatize, do not summarize. Each card's narration shows what the main character wants in this moment, what they try, what happens, and how they feel about it (use the card's feeling). On the failed-try card the old way visibly does not work. On the lowest moment the character nearly gives up. On the turning card the narration shows the character deciding — a thought, a breath, a line of speech — and then doing the new thing themselves. On the last card the change is shown in an action that mirrors the opening.
 - The lesson is never written as a moral or announced by the narrator ("and so he learned that…"). A character may say something natural in the moment ("Could you help me?"). If the template has a line for grown-ups, on the LAST card make it a talk-about-it question tied to the lesson (for example "Talk about it: when did you ask a friend for help?"); on other cards it stays a real fact.
 - Caption chain: the caption strips, read by themselves in order across ALL the cards with nothing else, must tell the whole story clearly. So captions use the characters' names (not "he"), say what happens rather than set a mood, and the first caption of each card connects to the last caption of the card before, often starting "But", "So" or "Then". Before finishing, read only the captions from first card to last and fix any place where the story cannot be followed.
@@ -655,7 +658,7 @@ export function createCards(deps) {
     // textMode: 'captions' = short captions, play box and a line for grown-ups (the story is read from the script);
     // 'story' = a short story paragraph printed on the card itself, so the cards can be read without the script.
     const textMode = ['captions', 'story'].includes(v.textMode) ? v.textMode : prev.textMode || 'captions';
-    return { model, quality, size, textMode, useTemplateRef: flag('useTemplateRef', true), chain: flag('chain', true), badge: flag('badge', true), proof: flag('proof', true) };
+    return { model, quality, size, textMode, useTemplateRef: flag('useTemplateRef', true), chain: flag('chain', true), badge: flag('badge', true), proof: flag('proof', true), autoFix: flag('autoFix', true) };
   }
   const newCard = (n, fields = {}) => ({ id: crypto.randomUUID(), n, topic: '', beat: '', place: '', draft: false, check: null, stale: null, prints: {}, chapter: '', arc: '', purpose: '', feeling: '', state: '', layout: '', setting: '', play: '', title: '', subtitle: '', tagline: '', hero: '', slots: [], closing: '', source: '', characters: [], narration: '', storyText: '', imageId: null, imageIds: [], ...fields });
   // Cast names as a model returns them or an author types them ("Ollie", "ollie the octopus"), matched to the cast's spelling.
@@ -868,7 +871,7 @@ export function createCards(deps) {
       x.world = story ? clampStr(parsed.world, 1500) : '';
       // Places keep their reference painting: this series' own, or the earlier story's when the world is shared.
       const oldPlaces = new Map([...(src?.places || []).map((pl) => ({ ...pl, id: crypto.randomUUID(), from: src.id })), ...(x.places || [])].map((pl) => [pl.name.toLowerCase(), pl]));
-      x.places = story ? (parsed.places || []).slice(0, 8).map((pl) => ({ id: crypto.randomUUID(), imageId: null, ...(oldPlaces.get(clampStr(pl.name, 80).toLowerCase()) || {}), name: clampStr(pl.name, 80), description: clampStr(pl.description, 600) })).filter((pl) => pl.name) : [];
+      x.places = story ? (parsed.places || []).slice(0, 8).map((pl) => ({ id: crypto.randomUUID(), imageId: null, ...(oldPlaces.get(clampStr(pl.name, 80).toLowerCase()) || {}), name: clampStr(pl.name, 80), description: clampStr(pl.description, 600), fixtures: clampStr(pl.fixtures, 400) })).filter((pl) => pl.name) : [];
       x.foundation = Object.fromEntries(FOUNDATION_FIELDS.map(([k]) => [k, story ? clampStr(parsed.foundation?.[k], 600) : '']));
       x.editorNotes = story && plan !== (void 0) ? clampStr(parsed.editorNotes, 1500) : '';
       x.logic = story ? logic : null;
@@ -995,10 +998,15 @@ export function createCards(deps) {
     if (many && s.image.badge) lines.push(`Small series badge in the top-left corner: ${q(`${s.title || 'Series'} · ${card.n} of ${s.cards.length}`)}`);
     if (unlinked.length) lines.push('', `Characters (draw them exactly like this on every card):\n${unlinked.map((c) => `- ${c.name}: ${c.description}`).join('\n')}`);
     const place = (s.places || []).find((pl) => pl.name && pl.name === card.place);
-    if (place) lines.push('', `Place: ${place.name} — ${place.description}${place.imageId ? ' (shown in the location reference image: keep its landmarks, shapes and plants; the light and colours follow this card)' : ''}`);
+    if (place) lines.push('', `Place: ${place.name} — ${place.description}${place.imageId ? ' (shown in the location reference image: keep its landmarks, shapes and plants; the light and colours follow this card)' : ''}${place.fixtures ? ` Objects here that the story depends on, as the story first finds them: ${place.fixtures} Keep their shape and size the same in every panel; whether they have been moved, opened or cut by now is given by the story facts.` : ''}`);
     const varied = Boolean(card.setting);
     if (varied) lines.push('', `Setting and colours of THIS card: ${card.setting}. Let this palette dominate the whole page — background, panel borders, title colour and ribbons are tinted to suit it — so the card looks clearly different in colour from the other cards of the series.`);
-    if (s.hiddenFriend) lines.push('', `Hidden friend: ${s.hiddenFriend}. Draw it exactly once, small (about the size of a thumbnail), tucked somewhere inside the pictures where a child can spot it; never over text.`);
+    if (s.hiddenFriend) {
+      // With several panels the friend tends to be drawn in each: name the one panel it belongs in (it moves from card to card).
+      const pics = slotsFor(L, card).filter((x) => x.role === 'story-panel' && byKey.get(x.key)?.visual);
+      const home = pics.length > 1 ? pics[(card.n - 1) % pics.length].label : '';
+      lines.push('', `Hidden friend: ${s.hiddenFriend}. Draw it exactly once on the whole card, small (about the size of a thumbnail), ${home ? `in ${home} only — in no other panel and in no box or ribbon —` : 'tucked somewhere inside the picture'} where a child can spot it; never over text.`);
+    }
     lines.push('', `Style (${varied ? 'the same rendering, lettering shapes and character designs on every card of the series; only the colours and layout change from card to card' : 'identical on every card of the series'}): ${styleOf(s, t)}`);
     if (s.brief.kind === 'story') lines.push('', varied
       ? 'Continuity: this card continues a story. Recurring characters keep exactly the same design, proportions and body colours on every card, even when the surroundings change colour.'
@@ -1031,14 +1039,19 @@ export function createCards(deps) {
     const placeFile = place && deps.recordFile && await deps.recordFile(place.imageId);
     if (placeFile) { const buf = await fsp.readFile(placeFile).catch(() => null); if (buf) refs.push({ dataUrl: `data:image/png;base64,${buf.toString('base64')}`, label: `place: ${place.name}`, text: `location reference for "${place.name}". Set this card there: keep its landmarks, rock and plant shapes and overall arrangement, seen from whatever angle suits the picture. It shows no characters; take characters only from their own references.` }); }
     if (s.image.chain && deps.recordFile && !opts.draft) {
-      const anchor = s.cards.find((c) => c.imageId && c.id !== card.id);
+      // The nearest finished card set in the same place whose picture passed proofreading; failing that the nearest good card.
+      // (Always using the first card pulled its cast and props into every later picture.)
+      const done = s.cards.filter((c) => c.imageId && c.id !== card.id), real = done.filter((c) => !c.draft);
+      const good = (c) => !(c.check && c.check.imageId === c.imageId && !c.check.pass);
+      const nearest = (list) => [...list].sort((a, b) => Math.abs(a.n - card.n) - Math.abs(b.n - card.n) || a.n - b.n)[0];
+      const anchor = nearest(real.filter((c) => good(c) && card.place && c.place === card.place)) || nearest(real.filter(good)) || nearest(real) || nearest(done);
       const file = anchor && await deps.recordFile(anchor.imageId);
       if (file) {
         const buf = await fsp.readFile(file).catch(() => null);
         if (buf && buf.length <= 15 * 1024 * 1024) refs.push({ dataUrl: `data:image/${path.extname(file).slice(1).replace('jpg', 'jpeg')};base64,${buf.toString('base64')}`, label: `series card ${anchor.n}`,
           text: card.setting
-            ? `card ${anchor.n} of this same series. Match its rendering style, lettering shapes and the exact design of any character that appears in both. Do NOT copy its colour palette, its page layout, its words or its pictures: this card has its own colours and layout as described above.`
-            : `card ${anchor.n} of this same series. The new card must look like it belongs to the same printed set: same lettering, colors, panel treatment${s.brief.kind === 'story' ? ' and the same characters and world' : ''}. Do not copy its words or repeat its pictures.` });
+            ? `card ${anchor.n} of this same series. Match its rendering style, lettering shapes and the exact design of any character that appears in both. Do NOT copy its colour palette, its page layout, its words or its pictures: this card has its own colours and layout as described above. Who is in each picture, and where, comes only from this card's own panel lists and story facts: never carry over a character, an object or a pose because that card shows it.`
+            : `card ${anchor.n} of this same series. The new card must look like it belongs to the same printed set: same lettering, colors, panel treatment${s.brief.kind === 'story' ? ' and the same characters and world' : ''}. Do not copy its words or repeat its pictures. Who is in each picture, and where, comes only from this card's own description.` });
       }
     }
     return refs;
@@ -1067,7 +1080,7 @@ export function createCards(deps) {
     hiddenFriendCount: { type: 'integer', description: 'how many times the hidden friend appears; -1 if the card has none to check' },
     pass: { type: 'boolean' }, fixNotes: str('if not pass: short instructions for the illustrator, one per line; otherwise ""'),
   });
-  async function checkCard(id, cardId, recordId) {
+  async function checkCard(id, cardId, recordId, opts = {}) {
     const s = await ensureContinuity(id).catch(() => getSeries(id));
     const card = s.cards.find((c) => c.id === cardId);
     if (!card) throw new HttpError(404, 'Card not found.');
@@ -1089,6 +1102,7 @@ export function createCards(deps) {
       cast && `CHARACTERS (how to tell them apart):\n${cast}`,
       s.hiddenFriend ? `HIDDEN FRIEND (must appear exactly once): ${s.hiddenFriend}` : 'There is no hidden friend on this card: report hiddenFriendCount -1.',
       onCard && 'This card has no caption strips; the descriptions above are for the pictures only.',
+      opts.draft && 'THIS IS A ROUGH DRAFT SKETCH, drawn quickly without character references. Do not judge lettering, spelling, the hidden friend, drawing quality or how closely a character matches its design: tell characters apart by kind and main colour. Report only picture problems: who is in each panel and where, and the state of the things the story depends on.',
     ].filter(Boolean).join('\n\n') }, { type: 'input_image', image_url: `data:image/png;base64,${(await fsp.readFile(file)).toString('base64')}`, detail: 'high' }] }];
     const { parsed: r } = await llmJson({ name: 'card_proof', model: CARD_MODEL, effort: 'low', schema: PROOF_SCHEMA, log: { type: 'card_proof', seriesId: id, card: card.n }, input,
       instructions: `You are the proofreader for printed children's story cards. Compare the finished card image with its script. Report: (1) any expected text that is misspelled, altered, cut off or missing — ignore line breaks, capitalisation of display lettering, and curly versus straight quotes; (2) lettered words that are not in the expected list (panel numbers are fine); (3) picture problems, each marked major or minor; (4) how many times the hidden friend appears.
@@ -1096,9 +1110,10 @@ MAJOR picture problems are only those a parent reading aloud would notice and th
 ALWAYS MAJOR, however small it is drawn and whatever else is right: a named character drawn where the story facts or a panel's must-NOT-show list say it cannot be (outside and free when the facts say it is trapped inside something; moving by itself when it is being carried; present after being left behind; in a panel that does not list it). Check every panel for this before anything else, and name the panel and the character. Also major: the thing the story's problem depends on is drawn in a state that undoes the problem (an entrance the facts call blocked is wide open; something out of reach is within reach).
 MINOR is everything else: exact counts of background things, details of props and small objects, how something is held, pose and anatomy details, markings and stripes, colours of small things, scenery, items in decorative boxes. When unsure, choose minor. Do not report matters of taste or composition at all.
 "pass" is true when there are no text problems, no extra text and no major picture problems.` });
+    if (opts.draft) { r.textProblems = []; r.extraText = []; r.hiddenFriendCount = -1; }
     const issues = [...r.textProblems.map((x) => `Text: “${x.expected}” → ${x.found}`), ...r.extraText.map((x) => `Extra text: “${x}”`), ...r.pictureProblems.filter((x) => x.severity === 'major').map((x) => x.issue), ...(r.hiddenFriendCount === 0 ? ['The hidden friend is missing'] : [])];
     const notes = [...r.pictureProblems.filter((x) => x.severity !== 'major').map((x) => x.issue), ...(r.hiddenFriendCount > 1 ? [`The hidden friend appears ${r.hiddenFriendCount} times`] : [])];
-    const check = { imageId: recId, pass: issues.length === 0, issues, notes, fixNotes: issues.length ? [...issues, ...notes].join('\n') : '', at: new Date().toISOString() };
+    const check = { imageId: recId, ...(opts.draft ? { draft: true } : {}), pass: issues.length === 0, issues, notes, fixNotes: issues.length ? [...issues, ...notes].join('\n') : '', at: new Date().toISOString() };
     await withSeries(id, (x) => { const c = x.cards.find((k) => k.id === cardId); if (c && c.imageId === recId) c.check = check; return x; });
     await appendLog({ type: 'card_proof', seriesId: id, card: card.n, recordId: recId, pass: check.pass, issues });
     return check;
@@ -1134,30 +1149,31 @@ MINOR is everything else: exact counts of background things, details of props an
     await appendLog({ type: 'card_image', seriesId: id, card: card.n, title: card.title, recordId: rec.id, draft: Boolean(opts.draft), refs: refs.map((x) => x.label), characterIds, costUsd: rec.costUsd });
     return { series: updated, record: rec };
   }
+  // Draw, proofread, and while the picture fails: let the script doctor fill in the picture brief when the script is at
+  // fault (applied automatically unless the series turns that off), then redraw with the proofreader's notes. At most three
+  // pictures for a final card and two for a draft sketch; the attempt with the fewest problems stays selected.
   async function handleCardImage(id, cardId, body = {}) {
-    const first = await drawCard(id, cardId, { draft: Boolean(body.draft), fixNotes: clampStr(body.fixNotes, 2000) });
+    const draft = Boolean(body.draft);
+    const first = await drawCard(id, cardId, { draft, fixNotes: clampStr(body.fixNotes, 2000) });
     const proof = 'proof' in body ? Boolean(body.proof) : first.series.image.proof !== false;
-    if (body.draft || !proof) return first;
-    const records = [first.record];
-    let check = await checkCard(id, cardId, first.record.id).catch(() => null);
-    // When the picture is wrong because the script never asked for the missing thing, redrawing cannot help: propose a
-    // corrected picture description instead and leave the decision to the author.
-    const proposal = check && !check.pass ? await proposeFix(id, cardId, check).catch(() => null) : null;
-    if (proposal) check = { ...check, proposal };
-    if (check && !check.pass && !proposal) {
-      const second = await drawCard(id, cardId, { fixNotes: check.fixNotes }).catch(() => null);
-      if (second) {
-        records.push(second.record);
-        const check2 = await checkCard(id, cardId, second.record.id).catch(() => null);
-        // Keep whichever attempt has fewer problems selected; both stay as versions of the card.
-        if (check2 && !check2.pass && check2.issues.length > check.issues.length) await withSeries(id, (x) => { const c = x.cards.find((k) => k.id === cardId); if (c) { c.imageId = first.record.id; c.check = check; } return x; });
-        else {
-          check = check2 || check;
-          if (check2 && !check2.pass) { const p2 = await proposeFix(id, cardId, check2).catch(() => null); if (p2) check = { ...check, proposal: p2 }; }
-        }
-      }
+    if (!proof) return first;
+    const auto = first.series.image.autoFix !== false, max = draft ? 2 : 3, fixed = [];
+    const tries = [{ record: first.record, check: await checkCard(id, cardId, first.record.id, { draft }).catch(() => null) }];
+    while (tries.length < max) {
+      const last = tries[tries.length - 1];
+      if (!last.check || last.check.pass) break;
+      const proposal = await proposeFix(id, cardId, last.check).catch(() => null);
+      if (proposal && !auto) { last.check = { ...last.check, proposal }; break; }
+      if (proposal) { await handleApplyFix(id, cardId, {}); fixed.push(proposal.explanation); }
+      const next = await drawCard(id, cardId, { draft, fixNotes: last.check.fixNotes }).catch(() => null);
+      if (!next) break;
+      tries.push({ record: next.record, check: await checkCard(id, cardId, next.record.id, { draft }).catch(() => null) });
     }
-    return { series: await getSeries(id), record: records[records.length - 1], records, check };
+    const score = (t) => (!t.check ? 99 : t.check.pass ? -1 : t.check.issues.length);
+    const best = tries.reduce((x, y) => (score(y) <= score(x) ? y : x));
+    const check = best.check && fixed.length ? { ...best.check, autoFixed: fixed } : best.check;
+    await withSeries(id, (x) => { const c = x.cards.find((k) => k.id === cardId); if (c) { c.imageId = best.record.id; if (check) c.check = check; } return x; });
+    return { series: await getSeries(id), record: best.record, records: tries.map((t) => t.record), check };
   }
 
   // ---------- script doctor: when the proofreader's complaint is really the script's fault ----------
@@ -1251,6 +1267,41 @@ Report only what a parent reading the cards in a row, or a sharp-eyed child, wou
     return { series: updated, continuity: updated.continuity };
   }
 
+  // ---------- read-back: what story do the pictures tell by themselves? ----------
+  // One reader sees only the pictures (no script) and says what each shows and what story they add up to; a second compares
+  // that with the story as written. Where the two differ, the pictures and the words are telling different stories.
+  async function handleReadback(id, progress = () => {}) {
+    const s = await getSeries(id);
+    const cards = s.cards.filter((c) => c.imageId && !c.draft);
+    if (s.brief.kind !== 'story' || cards.length < 3) throw new HttpError(400, 'Reading a story back needs at least three finished pictures.');
+    const content = [{ type: 'input_text', text: `CAST (only so that you can name who you see):\n${s.cast.map((c) => `- ${c.name}: ${c.description.slice(0, 220)}`).join('\n')}` }];
+    const sent = [];
+    for (const c of cards) {
+      const url = await recordJpeg(c.imageId, 1024).catch(() => null);
+      if (!url) continue;
+      sent.push(c);
+      content.push({ type: 'input_text', text: `Card ${c.n}:` }, { type: 'input_image', image_url: url, detail: 'high' });
+    }
+    progress({ phase: `Looking at ${sent.length} pictures without the script`, force: true });
+    const { parsed: seen } = await llmJson({ name: 'card_readback_look', model: CARD_MODEL, effort: 'low', log: { type: 'card_readback', seriesId: id }, input: [{ role: 'user', content }],
+      schema: obj({ cards: { type: 'array', items: obj({ n: { type: 'integer' }, seen: str('one or two plain sentences') }) }, retelling: str('four to six sentences') }),
+      instructions: `You are shown the cards of a children's picture story, in order. You have not been told the story. Look ONLY at the pictures and ignore every lettered word (titles, captions, speech bubbles, boxes, ribbons), as a child who cannot read would.
+For each card, say in one or two plain sentences what its pictures show: who is there, where each one is (inside or outside what, held by whom), what they are doing, and what state the important things are in. Report what is drawn, even when it seems odd; do not smooth it into what would make sense.
+Then retell the whole story, as far as the pictures alone tell it, in four to six sentences. Where the pictures do not show why something happens or how someone got somewhere, say that plainly instead of guessing.` });
+    progress({ phase: 'Comparing what the pictures say with the story as written', force: true });
+    const intended = [s.spine && `Spine: ${s.spine}`, `Cards as written:\n${sent.map((c) => `Card ${c.n} "${c.title}": ${c.beat}${c.state ? ` [state at the end: ${c.state}]` : ''}`).join('\n')}`].filter(Boolean).join('\n\n');
+    const { parsed: r } = await llmJson({ name: 'card_readback_compare', model: CARD_MODEL, effort: 'low', log: { type: 'card_readback', seriesId: id },
+      schema: obj({ verdict: str('one sentence: do the pictures tell the same story?'), issues: { type: 'array', items: obj({ card: { type: 'integer' }, intended: str('what the story says, briefly'), seen: str('what the pictures show instead'), severity: { type: 'string', enum: ['major', 'minor'] } }) } }),
+      instructions: `A reader who saw only the pictures of a children's story described each card and retold the story. Compare that with the story as written. Report each card where a child looking only at the pictures would understand something different about WHO is WHERE, what happens, or the state of the thing the plot depends on. "major": the pictures contradict the story or lose a step it needs (someone free who should be trapped, the problem already solved, the helper's action not shown, the family missing at the reunion). "minor": a detail differs but the story survives. Do not report differences of wording, mood, colours, or things the picture reader simply could not know from pictures (names of places, what is said). At most ten, most serious first; none if the pictures tell the same story.`,
+      input: `THE STORY AS WRITTEN\n${intended}\n\nWHAT THE PICTURES SHOW (from a reader who had only the pictures)\n${(seen.cards || []).map((c) => `Card ${c.n}: ${c.seen}`).join('\n')}\n\nThat reader's retelling: ${seen.retelling}` });
+    const known = new Set(sent.map((c) => c.n));
+    const readback = { at: new Date().toISOString(), checked: Object.fromEntries(sent.map((c) => [c.id, c.imageId])), retelling: clampStr(seen.retelling, 2000), verdict: clampStr(r.verdict, 400),
+      issues: (r.issues || []).slice(0, 10).filter((x) => known.has(x.card)).map((x) => ({ id: crypto.randomUUID(), card: x.card, intended: clampStr(x.intended, 400), seen: clampStr(x.seen, 400), severity: x.severity === 'major' ? 'major' : 'minor' })) };
+    const updated = await withSeries(id, (x) => { x.readback = readback; return x; });
+    await appendLog({ type: 'card_readback', seriesId: id, cards: sent.length, issues: readback.issues.map((x) => `${x.severity}: card ${x.card} — ${x.seen}`) });
+    return { series: updated, readback };
+  }
+
   // ---------- text tidy: caption length and steady naming, after writing ----------
   // The name the story actually uses for a character: "Ollie" rather than "Ollie the Octopus" when the text says Ollie.
   function callName(name, s) {
@@ -1293,7 +1344,8 @@ Leave text that already follows the rules exactly as it is.`,
   }
 
   // ---------- places: one reference painting per place, so the world stays the same across cards ----------
-  async function handlePlaces(id) {
+  // body.redo: the id of a place to paint again (its old painting stays in History).
+  async function handlePlaces(id, body = {}) {
     let s = await getSeries(id);
     if (s.brief.kind !== 'story' || !s.cards.length) throw new HttpError(400, 'Plan a story first.');
     if (!(s.places || []).length) {
@@ -1303,16 +1355,25 @@ Leave text that already follows the rules exactly as it is.`,
         instructions: 'From this card story, list the three to six distinct places it visits. For each: a short name and a 20–40 word description of the landmarks, shapes and plants an illustrator must keep the same every time (no characters, no events, no colours of light). Then give every card the name of its place, exactly as listed.',
         input: `World: ${s.world || '—'}\n\n${s.cards.map((c) => `Card ${c.n} "${c.title || c.topic}": ${c.beat} [${c.setting}]`).join('\n')}` });
       s = await withSeries(id, (x) => {
-        x.places = (parsed.places || []).slice(0, 8).map((pl) => ({ id: crypto.randomUUID(), name: clampStr(pl.name, 80), description: clampStr(pl.description, 600), imageId: null })).filter((pl) => pl.name);
+        x.places = (parsed.places || []).slice(0, 8).map((pl) => ({ id: crypto.randomUUID(), name: clampStr(pl.name, 80), description: clampStr(pl.description, 600), imageId: null })).filter((pl) => pl.name);   // fixtures follow below
         for (const o of parsed.cards || []) { const c = x.cards.find((k) => k.n === o.n); if (c && x.places.some((pl) => pl.name === o.place)) c.place = o.place; }
         return x;
       });
     }
     const t = await templatesFor(s);
+    // Places planned before they carried "fixtures" (the objects the plot depends on, in their story state) get them here.
+    if (s.places.some((pl) => pl.fixtures === undefined)) {
+      const { parsed } = await llmJson({ name: 'card_place_fixtures', model: CARD_MODEL, effort: 'low', log: { type: 'card_places', seriesId: id },
+        schema: obj({ places: { type: 'array', items: obj({ name: str('exactly as given'), fixtures: str() }) } }),
+        instructions: 'For each place of this card story, write "fixtures": the objects in that place that the plot depends on, in the exact state they are in when the story FIRST arrives there, with position and size (for example "a loose stone wedged across the low entrance of the hollow, covering all but a gap one hand high"). One or two sentences; no characters; "" when the plot depends on no object there. Take the facts from the story; do not invent objects.',
+        input: `${storyDigest(s, t.layout)}\n\nReturn places: ${s.places.map((pl) => pl.name).join('; ')}` }).catch(() => ({ parsed: { places: [] } }));
+      s = await withSeries(id, (x) => { for (const pl of x.places) if (pl.fixtures === undefined) pl.fixtures = clampStr((parsed.places || []).find((o) => o.name === pl.name)?.fixtures, 400); return x; });
+    }
     const made = [];
-    for (const pl of s.places.filter((x) => !x.imageId)) {
-      const prompt = [`Location reference painting for the children's story "${s.title}": ${pl.name}.`, '', `Show the place by itself, as a wide establishing view with its landmarks clearly readable: ${pl.description}`, s.world && `World: ${s.world}`,
-        '', `Style: ${styleOf(s, t)}`, '', 'Constraints:', '- No characters, animals or creatures of any kind.', '- No text, letters, panels, borders or frames; one single full-bleed picture.', '- Neutral, even daylight so the shapes are clear.'].filter((l) => l !== '' && l != null).join('\n');
+    for (const pl of s.places.filter((x) => !x.imageId || x.id === body.redo)) {
+      const prompt = [`Location reference painting for the children's story "${s.title}": ${pl.name}.`, '', `Show the place by itself, as a wide establishing view with its landmarks clearly readable: ${pl.description}`,
+        pl.fixtures && `The story depends on this, so paint it large, in clear view and exactly in this state: ${pl.fixtures}`, s.world && `World: ${s.world}`,
+        `Style: ${styleOf(s, t)}`, 'Constraints:', '- No characters, animals or creatures of any kind.', '- No text, letters, panels, borders or frames; one single full-bleed picture.', '- Neutral, even daylight so the shapes are clear.'].filter(Boolean).join('\n\n').replace(/\n\n- /g, '\n- ');
       const r = await handleGenerate({ prompt, originalPrompt: `${pl.name} — place reference for ${s.title}`, model: s.image.model, quality: 'medium', size: '1536x1024', format: 'png', n: 1, tags: ['flash-card', slugify(s.title || 'series'), 'place'] }, { ai: { feature: 'card_place', refs: { seriesId: s.id } } });
       const rec = await handleUpdate(r.images[0].id, { title: `${s.title} — place: ${pl.name}`.slice(0, 120) });
       made.push(rec);
@@ -1594,9 +1655,10 @@ Leave text that already follows the rules exactly as it is.`,
     else if (m === 'POST' && a === 'cards' && c === 'check') { const check = await checkCard(id, b); const proposal = check.pass ? null : await proposeFix(id, b, check).catch(() => null); send(res, 200, { check: { ...check, proposal }, series: await getSeries(id) }); }
     else if (m === 'POST' && a === 'cards' && c === 'fix') send(res, 200, await handleApplyFix(id, b, await readJson(req)));
     else if (m === 'POST' && a === 'continuity') send(res, 200, await handleContinuity(id));
+    else if (m === 'POST' && a === 'readback') { await getSeries(id); await streamed(res, url, CARD_MODEL, (progress) => handleReadback(id, progress)); }
     else if (m === 'POST' && a === 'logic') { await getSeries(id); await streamed(res, url, CARD_MODEL, (progress) => handleLogic(id, progress)); }
     else if (m === 'POST' && a === 'tidy') send(res, 200, await tidyText(id));
-    else if (m === 'POST' && a === 'places') send(res, 200, await handlePlaces(id));
+    else if (m === 'POST' && a === 'places') send(res, 200, await handlePlaces(id, await readJson(req)));
     else if (m === 'POST' && a === 'extras') send(res, 200, await handleExtras(id, await readJson(req)));
     else if (m === 'POST' && a === 'cast' && c === 'sheet') send(res, 200, await handleCastSheet(id, b));
     else if (m === 'POST' && a === 'cast' && c === 'bible') send(res, 200, await handleCastBible(id, b, await readJson(req)));

@@ -6,7 +6,7 @@ const els = {
   tplInstructions: $('tpl-instructions'), makeTemplate: $('make-template'), analyzeSelected: $('analyze-selected'), suggestGroups: $('suggest-groups'),
   tplList: $('tpl-list'),
   seriesSelect: $('series-select'), newSeries: $('new-series'), deleteSeries: $('delete-series'), template: $('template'), styleTemplate: $('style-template'),
-  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), logic: $('logic'), checkLogic: $('check-logic'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
+  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), logic: $('logic'), checkLogic: $('check-logic'), readback: $('readback'), checkReadback: $('check-readback'), autoFix: $('auto-fix'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
   artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textMode: $('text-mode'), redrawAll: $('redraw-all'), proof: $('proof'), draftAll: $('draft-all'), extras: $('extras'), makePlaces: $('make-places'), makeExtras: $('make-extras'), tidy: $('tidy'), useTemplateRef: $('use-template-ref'), chain: $('chain'), badge: $('badge'),
   stepper: $('stepper'), flowRow: $('flow-row'), next: $('next'), stop: $('stop'), upscale: $('upscale'), saveState: $('save-state'), status: $('status'), strip: $('strip'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
@@ -373,7 +373,7 @@ const currentTemplate = () => templates.find((t) => t.id === (series?.brief.temp
 const audience = () => config.cards.audiences.find((a) => a.id === (series?.brief.audience || els.audience.value)) || config.cards.audiences[0];
 const readBrief = () => ({ kind: kind(), templateId: els.template.value, styleTemplateId: els.styleTemplate.value, premise: els.premise.value, topics: els.topics.value, lesson: els.lesson.value, audience: els.audience.value,
   cardCount: Number(els.cardCount.value) || 6, tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars] });
-const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
+const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, autoFix: els.autoFix.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
 function writeBrief() {
   const b = series?.brief, im = series?.image;
   document.querySelector(`input[name=kind][value=${b?.kind || 'set'}]`).checked = true;
@@ -382,7 +382,7 @@ function writeBrief() {
   briefChars.clear(); for (const id of b?.characterIds || []) briefChars.add(id);
   if (im) { els.imgModel.value = im.model; els.imgQuality.value = im.quality; ensureSize(im.size); }
   els.textMode.value = im?.textMode || 'captions';
-  els.proof.checked = im?.proof ?? true;
+  els.proof.checked = im?.proof ?? true; els.autoFix.checked = im?.autoFix ?? true;
   els.useTemplateRef.checked = im?.useTemplateRef ?? true; els.chain.checked = im?.chain ?? true; els.badge.checked = im?.badge ?? true;
   renderBriefChars(); kindChanged(); artSummary();
 }
@@ -413,7 +413,7 @@ for (const [el, k] of [[els.premise, 'premise'], [els.topics, 'topics'], [els.le
   });
 }
 for (const r of document.querySelectorAll('input[name=kind]')) r.addEventListener('change', () => { kindChanged(); if (series) { series.brief.kind = kind(); queue({ brief: { kind: kind() } }); } });
-for (const [el, k] of [[els.imgModel, 'model'], [els.imgQuality, 'quality'], [els.imgSize, 'size'], [els.textMode, 'textMode'], [els.proof, 'proof'], [els.useTemplateRef, 'useTemplateRef'], [els.chain, 'chain'], [els.badge, 'badge']]) {
+for (const [el, k] of [[els.imgModel, 'model'], [els.imgQuality, 'quality'], [els.imgSize, 'size'], [els.textMode, 'textMode'], [els.proof, 'proof'], [els.autoFix, 'autoFix'], [els.useTemplateRef, 'useTemplateRef'], [els.chain, 'chain'], [els.badge, 'badge']]) {
   el.addEventListener('change', () => { artSummary(); if (series) queue({ image: { [k]: el.type === 'checkbox' ? el.checked : el.value } }); refreshFlow(); });
 }
 
@@ -574,8 +574,7 @@ async function illustrateAll(all = false) {
       if (stopRequested) break;
       onProgress({ phase: `Illustrating${els.proof.checked ? ' and proofreading' : ''} card ${c.n} of ${series.cards.length} (about a minute each)`, done, total: todo.length, snippet: c.title });
       const r = await illustrate(c.id); done++; if (r.check && !r.check.pass) flagged++;
-      for (const rec of (r.records || []).slice(0, -1)) spent += rec.costUsd || 0;
-      spent += records.get(series.cards.find((x) => x.id === c.id).imageId)?.costUsd || 0;
+      for (const rec of r.records || [r.record]) spent += rec.costUsd || 0;   // every attempt was paid for, whichever one is kept
       renderSeries();
     }
     setStatus(`Illustrated ${plural(done, 'card')}${spent ? ` for ${fmtCost(spent)}` : ''}.${flagged ? ` ${plural(flagged, 'card')} still ${flagged === 1 ? 'has' : 'have'} something the proofreader flagged — look for ⚠ below.` : els.proof.checked ? ' The proofreader passed every card.' : ''}${stopRequested ? ' Stopped.' : ''}`, flagged ? 'error' : 'ok');
@@ -628,6 +627,32 @@ async function checkLogic() {
   });
 }
 els.checkLogic.addEventListener('click', checkLogic);
+// What a reader who saw only the pictures understood, set against the story as written.
+function renderReadback() {
+  const r = series?.readback;
+  els.checkReadback.hidden = !series || series.brief.kind !== 'story' || series.cards.filter((c) => c.imageId && !c.draft).length < 3;
+  if (!r) { els.readback.innerHTML = ''; return; }
+  const old = series.cards.some((c) => c.imageId && r.checked[c.id] !== c.imageId);
+  els.readback.innerHTML = `<div><b>Read back from the pictures alone:</b> ${escapeHtml(r.verdict)}${old ? ' <span class="hint">(some pictures have changed since)</span>' : ''}</div><div class="hole"><div class="fix">${escapeHtml(r.retelling)}</div></div>`
+    + r.issues.map((x) => `<div class="hole ${x.severity === 'major' ? 'breaks' : 'confusing'}" data-rb="${escapeHtml(x.id)}"><div><b>Card ${x.card}</b> · the pictures show: ${escapeHtml(x.seen)}</div><div class="fix">The story says: ${escapeHtml(x.intended)}</div><div class="row"><button class="mini" data-rb-fix type="button">Redraw card ${x.card} to match the story</button></div></div>`).join('');
+}
+els.checkReadback.addEventListener('click', () => run('Reading the story back from the pictures', async (onProgress) => {
+  await flush();
+  const r = await streamApi(`/api/cards/series/${series.id}/readback`, {}, onProgress);
+  series = r.series; renderSeries();
+  const n = r.readback.issues.filter((x) => x.severity === 'major').length;
+  setStatus(n ? `The pictures tell a different story on ${plural(n, 'card')} — see the story box.` : 'The pictures tell the same story as the words.', n ? 'error' : 'ok');
+}));
+els.readback.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-rb-fix]')) return;
+  const x = series.readback?.issues.find((k) => k.id === e.target.closest('[data-rb]').dataset.rb), c = x && series.cards.find((k) => k.n === x.card);
+  if (c) run(`Illustrating card ${c.n} (about a minute)`, async () => { await flush(); const r = await illustrate(c.id, { fixNotes: `The picture must show: ${x.intended} The previous picture wrongly showed: ${x.seen}` }); renderSeries(); setStatus(`Card ${c.n} redrawn.${r.check && !r.check.pass ? ' The proofreader still flags something — see ⚠ on the card.' : ''}`, r.check && !r.check.pass ? 'error' : 'ok'); });
+});
+els.extras.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-redo-place]'); if (!b) return;
+  e.preventDefault();
+  seriesAction('Repainting the place', 'places', { redo: b.dataset.redoPlace }, () => 'Place repainted. New pictures of cards set there will use it.');
+});
 els.logic.addEventListener('click', (e) => {
   if (!e.target.closest('[data-fix-hole]')) return;
   const h = series.logic?.holes.find((x) => x.id === e.target.closest('[data-hole]').dataset.hole);
@@ -645,9 +670,9 @@ function renderSeries() {
   els.world.value = series.world || '';
   els.foundation.innerHTML = config.cards.foundationFields.map((f) => `<label class="field"><span>${escapeHtml(f.label)}</span><textarea data-f="${f.id}" rows="2">${escapeHtml(series.foundation?.[f.id] || '')}</textarea></label>`).join('');
   els.editorNotes.textContent = series.editorNotes ? `Story editor: ${series.editorNotes}` : '';
-  renderLogic();
-  const ex = [series.cover?.imageId && ['Cover', series.cover.imageId], ...Object.entries(series.chapterCards || {}).map(([k, v]) => [`Chapter: ${k}`, v]), ...(series.places || []).map((pl) => [`Place: ${pl.name}`, pl.imageId])].filter((x) => x && x[1] && records.get(x[1]));
-  els.extras.innerHTML = ex.length ? ex.map(([label, rid]) => `<a href="${escapeHtml(records.get(rid).url)}" target="_blank" title="${escapeHtml(label)}"><img loading="lazy" src="${escapeHtml(recThumb(rid))}" alt=""><span>${escapeHtml(label)}</span></a>`).join('') : `<span class="hint">None yet.${(series.places || []).length ? ` Places planned: ${escapeHtml(series.places.map((x) => x.name).join(', '))}.` : ''}</span>`;
+  renderLogic(); renderReadback();
+  const ex = [series.cover?.imageId && ['Cover', series.cover.imageId], ...Object.entries(series.chapterCards || {}).map(([k, v]) => [`Chapter: ${k}`, v]), ...(series.places || []).map((pl) => [`Place: ${pl.name}`, pl.imageId, pl])].filter((x) => x && x[1] && records.get(x[1]));
+  els.extras.innerHTML = ex.length ? ex.map(([label, rid, pl]) => `<a href="${escapeHtml(records.get(rid).url)}" target="_blank" title="${escapeHtml(pl?.fixtures ? `${label} — must show: ${pl.fixtures}` : label)}"><img loading="lazy" src="${escapeHtml(recThumb(rid))}" alt=""><span>${escapeHtml(label)}</span>${pl ? `<button class="mini" data-redo-place="${escapeHtml(pl.id)}" type="button" title="Paint this place again, with the objects the story depends on in their story state">↻ Repaint</button>` : ''}</a>`).join('') : `<span class="hint">None yet.${(series.places || []).length ? ` Places planned: ${escapeHtml(series.places.map((x) => x.name).join(', '))}.` : ''}</span>`;
   els.spine.value = series.spine || ''; els.refrain.value = series.refrain || ''; els.hiddenFriend.value = series.hiddenFriend || '';
   els.script.href = `/api/cards/series/${series.id}/script.md`;
   const t = currentTemplate(), look = templates.find((x) => x.id === series.brief.styleTemplateId) || t;
@@ -717,7 +742,7 @@ function renderCards() {
         ${c.imageIds.length > 1 ? `<div class="variants">${c.imageIds.map((id) => `<img class="${id === c.imageId ? 'on' : ''}" data-variant="${id}" src="${escapeHtml(recThumb(id))}" alt="">`).join('')}</div>` : ''}
         ${c.title ? `<button class="btn secondary small" data-act="image" type="button">${rec ? '↻ New version' : '🎨 Illustrate'}</button>` : ''}
         ${rec && c.draft ? '<span class="chip draft">Draft sketch</span>' : ''}
-        ${rec && !c.draft ? (c.check && c.check.imageId === c.imageId ? (c.check.pass ? `<span class="proof ok" title="${escapeHtml((c.check.notes || []).join(' · '))}">✓ Proofread: words and pictures match${(c.check.notes || []).length ? ` · ${c.check.notes.length} small note${c.check.notes.length === 1 ? '' : 's'}` : ''}</span>` : `<div class="proof bad">⚠ Proofreader:<ul>${c.check.issues.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul><button class="mini" data-act="fix" type="button">Redraw fixing these</button></div>`) : '<button class="mini" data-act="check" type="button">Proofread this card</button>') : ''}
+        ${rec ? (c.check && c.check.imageId === c.imageId ? (c.check.pass ? `<span class="proof ok" title="${escapeHtml([...(c.check.autoFixed || []).map((x) => `Brief filled in: ${x}`), ...(c.check.notes || [])].join(' · '))}">✓ ${c.draft ? 'Draft checked: the right characters in the right places' : 'Proofread: words and pictures match'}${(c.check.autoFixed || []).length ? ' · brief filled in automatically' : ''}${(c.check.notes || []).length ? ` · ${c.check.notes.length} small note${c.check.notes.length === 1 ? '' : 's'}` : ''}</span>` : `<div class="proof bad">⚠ Proofreader:<ul>${c.check.issues.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul><button class="mini" data-act="fix" type="button">Redraw fixing these</button></div>`) : (c.draft ? '' : '<button class="mini" data-act="check" type="button">Proofread this card</button>')) : ''}
         ${rec ? `<span class="hint">${rec.costUsd ? fmtCost(rec.costUsd) : ''}</span>` : ''}</div>
       <div class="page-body">
         <div class="page-head"><b>Card ${c.n}</b>${c.chapter ? `<span class="chip">${escapeHtml(c.chapter)}</span>` : ''}<span class="spacer"></span><button class="mini" data-act="up" type="button">↑</button><button class="mini" data-act="down" type="button">↓</button><button class="mini" data-act="remove" type="button">✕</button></div>
