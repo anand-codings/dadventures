@@ -1,15 +1,19 @@
-// Print Sheets — pick images, arrange them N-up on a FedEx-printable page (drag to rearrange, optional back sides), preview, build a PDF.
+// Print Sheets — one workspace in work order: 1 pick pictures, 2 check the sheet (one page at a time, exactly as it prints),
+// 3 set it up. The sheet's name, the Sheets menu and Build PDF sit in the page header.
 import { computeLayout, itemKey, edgeMarks, DEFAULT_SPEC, round3 } from '/sheets-layout.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  sheetSelect: $('sheet-select'), newSheet: $('new-sheet'), deleteSheet: $('delete-sheet'), name: $('name'),
+  name: $('name'), saveState: $('save-state'), sheetsBtn: $('sheets-btn'), sheetsPop: $('sheets-pop'), buildMeta: $('build-meta'),
   page: $('page'), orientation: $('orientation'), customSize: $('custom-size'), customWidth: $('custom-width'), customHeight: $('custom-height'), pageNote: $('page-note'),
-  grid: $('grid'), customGrid: $('custom-grid'), cols: $('cols'), rows: $('rows'), margin: $('margin'), gutter: $('gutter'), fit: $('fit'), maxDpi: $('max-dpi'),
+  grid: $('grid'), gridTiles: $('grid-tiles'), gridNote: $('grid-note'), customGrid: $('custom-grid'), cols: $('cols'), rows: $('rows'),
+  spacingSeg: $('spacing-seg'), spacingNote: $('spacing-note'), margin: $('margin'), gutter: $('gutter'), fit: $('fit'), maxDpi: $('max-dpi'),
   cutMarks: $('cut-marks'), pack: $('pack'), outline: $('outline'), label: $('label'), encode: $('encode'), duplex: $('duplex'), flip: $('flip'), backFit: $('back-fit'), duplexOptions: $('duplex-options'),
+  flipNote: $('flip-note'), moreNote: $('more-note'),
   summary: $('summary'), warnings: $('warnings'), build: $('build'), status: $('status'), render: $('render'),
-  previewMeta: $('preview-meta'), clear: $('clear'), preview: $('preview'), itemsMeta: $('items-meta'), items: $('items'), itemsHead: $('items-head'), allBack: $('all-back'),
-  search: $('search'), sourceFilter: $('source-filter'), refresh: $('refresh'), pickerHint: $('picker-hint'), picker: $('picker'), topbar: $('topbar-meta'),
+  stage: $('stage'), preview: $('preview'), previewMeta: $('preview-meta'), sideSeg: $('side-seg'), pager: $('pager'), pagerLabel: $('pager-label'), prev: $('prev'), next: $('next'),
+  clear: $('clear'), itemsMeta: $('items-meta'), items: $('items'), piece: $('piece'), allBack: $('all-back'),
+  search: $('search'), sourceFilter: $('source-filter'), folderChips: $('folder-chips'), refresh: $('refresh'), pickerHint: $('picker-hint'), pickerCount: $('picker-count'), picker: $('picker'), topbar: $('topbar-meta'),
 };
 
 let config = null;
@@ -21,6 +25,15 @@ const imagesById = new Map();
 let busy = false;
 let layout = null;
 let armedBack = null;          // index of the item whose back the next picker click fills
+let selItem = null;            // index of the piece whose details show under the strip
+const view = { sheet: 0, side: 'front' };   // the one page the preview shows
+// Spacing presets turn the laminate / guillotine advice into a choice. They only set the margin and the gap.
+const SPACING = {
+  laminate: { margin: 0.25, gutter: 0.5, note: 'A ½ in gap, so every piece keeps a sealed edge after cutting.' },
+  cut: { margin: 0.375, gutter: 0, note: 'No gap, so each cut line is shared. The ⅜ in margin lets the crop marks at the page edges print.' },
+  custom: { note: 'Laminating: keep the gap at ¼–½ in. Cutting only: a gap of 0 and a margin of ⅜ in.' },
+};
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const DRAFT_KEY = 'dadventures.sheetDraft';
 const DND = 'application/x-sheet';   // dataTransfer type: JSON { kind: 'image'|'item', id?, index? }
 
@@ -108,7 +121,7 @@ async function applyUrl() {
     if (!bare) { const base = baseSpec(); for (const [k, p] of Object.entries(URL_KEYS)) spec[k] = fromUrl(k, urlState.get(p), base[k]); }
     writeForm();
     renderRender(sheets.find((s) => s.id === sheetId)?.lastRender || null);
-    els.deleteSheet.disabled = !sheetId; els.sheetSelect.value = sheetId || '';
+    selItem = null; view.sheet = 0; view.side = 'front';
     els.search.value = urlState.get('q') || '';
     const folder = urlState.get('folder') || '';
     els.sourceFilter.value = sources.some((s) => s.id === folder) ? folder : '';
@@ -121,30 +134,83 @@ async function applyUrl() {
 function update() {
   readForm();
   layout = computeLayout(spec, imagesById);
+  syncControls(layout);
   renderPreview(layout);
   renderItems();
   renderSummary(layout);
   renderPicker();
+  renderHead();
   saveDraft();
   syncUrl();
+}
+
+// Segmented controls and tiles are faces for hidden <select>s, so the form, the draft and the link keep one source of truth.
+function syncControls(layout) {
+  for (const box of document.querySelectorAll('[data-for]')) {
+    const v = $(box.dataset.for).value;
+    for (const b of box.querySelectorAll('button[data-v]')) { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-pressed', b.dataset.v === v); }
+  }
+  const preset = Object.keys(SPACING).find((k) => SPACING[k].margin === spec.margin && SPACING[k].gutter === spec.gutter) || 'custom';
+  for (const b of els.spacingSeg.querySelectorAll('button')) { b.classList.toggle('on', b.dataset.preset === preset); b.setAttribute('aria-pressed', b.dataset.preset === preset); }
+  els.spacingNote.textContent = SPACING[preset].note;
+  const cell = `${layout.cols} × ${layout.rows} grid · each cell is ${round3(layout.cell.width)} × ${round3(layout.cell.height)} in`;
+  els.gridNote.textContent = spec.grid === 'auto' ? (layout.count ? `Auto: ${cell}` : 'Auto picks the best fit as you add pictures.') : cell;
+  els.flipNote.textContent = `Each back is mirrored so it lands behind its front. At the print shop, ask for “double-sided, flip on the ${spec.flip} edge”.`;
+  const more = [spec.fit === 'cover' ? 'Fill the cell' : 'Whole image', spec.maxDpi >= 1200 ? 'Full resolution' : `${spec.maxDpi} DPI`, spec.encode === 'png' ? 'PNG' : 'JPEG'];
+  if (spec.pack) more.push('packed'); if (spec.outline) more.push('border'); if (spec.label) more.push('name label');
+  els.moreNote.textContent = more.join(' · ');
+}
+
+// What is saved is compared as text: the name plus every setting and piece, in a fixed order.
+const sig = (name, sp) => JSON.stringify([name || '', Object.keys(DEFAULT_SPEC).sort().map((k) => (k === 'items'
+  ? (sp.items || []).map((it) => [it.source, it.rel, Math.max(1, it.copies || 1), it.back ? [it.back.source, it.back.rel] : null])
+  : sp[k] ?? DEFAULT_SPEC[k]))]);
+function isDirty() {
+  const saved = sheets.find((s) => s.id === sheetId);
+  return !saved || sig(saved.name, { ...DEFAULT_SPEC, ...saved.spec }) !== sig(els.name.value.trim(), spec);
+}
+function renderHead() {
+  if (!layout) return;
+  const dirty = isDirty();
+  const state = sheetId ? (dirty ? 'Unsaved changes' : 'Saved') : (spec.items.length ? 'Not saved' : '');
+  els.saveState.textContent = state; els.saveState.hidden = !state; els.saveState.classList.toggle('ok', state === 'Saved');
+  const preset = config.sheets.pageSizes.find((p) => p.id === spec.page);
+  const paper = preset && preset.id !== 'custom' ? preset.label : `${round3(layout.page.width)} × ${round3(layout.page.height)} in`;
+  const sub = layout.count ? `${paper} · ${layout.cols * layout.rows} per page${layout.duplex ? ' · double-sided' : ''}` : 'Pick pictures on the left to start.';
+  window.dvShell?.setHead({ title: $('ws-name'), sub });
+  const pages = layout.pages.length, last = sheets.find((s) => s.id === sheetId)?.lastRender;
+  els.buildMeta.querySelector('b').textContent = !layout.count ? 'Nothing to build yet'
+    : layout.duplex ? `${plural(pages, 'page')} · ${plural(pages / 2, 'sheet')} of paper` : `${plural(pages, 'page')} · ${plural(layout.count, 'piece')}`;
+  els.buildMeta.querySelector('small').textContent = !layout.count ? 'Add a picture first'
+    : last && !dirty ? `PDF built · ${fmtBytes(last.bytes)}` : `${spec.encode === 'png' ? 'PNG' : 'JPEG'} · ${spec.maxDpi >= 1200 ? 'full resolution' : `${spec.maxDpi} DPI`}`;
+  renderMenu();
+}
+function renderMenu() {
+  els.sheetsPop.innerHTML = `
+    <button type="button" data-act="new">+ New sheet</button>
+    <button type="button" data-act="save" ${spec.items.length && isDirty() ? '' : 'disabled'}>Save this sheet</button>
+    <div class="ws-pop-label">Saved sheets</div>
+    ${sheets.map((s) => `<button type="button" class="${s.id === sheetId ? 'on' : ''}" data-open="${escapeHtml(s.id)}"><b>${escapeHtml(s.name)}</b><small>${plural(s.spec.items.length, 'picture')}${s.spec.duplex ? ' · double-sided' : ''}${s.lastRender ? ' · PDF' : ''}</small></button>`).join('') || '<div class="hint">None yet. Save this sheet, or build its PDF.</div>'}
+    <button type="button" class="danger" data-act="delete" ${sheetId ? '' : 'disabled'} title="Its PDF is removed; source pictures are untouched">Delete this sheet</button>`;
 }
 
 function renderSummary(layout) {
   const first = layout.pages[0]?.slots.find((s) => s.image);
   const imgSize = first ? `${round3(first.draw.w)} × ${round3(first.draw.h)} in` : '—';
   const dpis = layout.pages.flatMap((p) => p.slots.map((s) => s.dpi).filter(Boolean));
-  const dpi = dpis.length ? `${Math.min(...dpis)}${Math.max(...dpis) !== Math.min(...dpis) ? `–${Math.max(...dpis)}` : ''} DPI` : '—';
+  const lo = Math.min(...dpis), hi = Math.max(...dpis);
+  const dpi = dpis.length ? `${lo}${hi !== lo ? `–${hi}` : ''} DPI` : '—';
   const sheetsN = layout.count ? Math.ceil(layout.pages.length / (layout.duplex ? 2 : 1)) : 0;
+  const paper = !layout.count ? '—' : plural(sheetsN, layout.duplex ? 'sheet' : 'page');
   els.summary.innerHTML = `
-    <div><span>Page</span><b>${round3(layout.page.width)} × ${round3(layout.page.height)} in</b></div>
-    <div><span>Grid</span><b>${layout.cols} × ${layout.rows} = ${layout.cols * layout.rows} per page</b></div>
-    <div><span>Cell</span><b>${round3(layout.cell.width)} × ${round3(layout.cell.height)} in</b></div>
-    <div><span>Printed image</span><b>${imgSize}</b></div>
-    <div><span>Source detail</span><b>${dpi}</b></div>
-    <div><span>${layout.duplex ? 'Sheets (2 pages each)' : 'Pages'}</span><b>${sheetsN} (${layout.count} image${layout.count === 1 ? '' : 's'})</b></div>`;
-  els.warnings.hidden = !layout.warnings.length;
-  els.warnings.innerHTML = layout.warnings.map((w) => `<div>⚠ ${escapeHtml(w)}</div>`).join('');
-  els.previewMeta.textContent = layout.count ? `${layout.pages.length} page${layout.pages.length === 1 ? '' : 's'} · ${layout.cols} × ${layout.rows}${layout.duplex ? ' · double-sided' : ''}` : 'Pick images below to start';
+    <div><span>Each piece prints</span><b>${imgSize}</b></div>
+    <div><span>Picture detail</span><b class="${dpis.length ? (lo < 150 ? 'low' : 'ok') : ''}">${dpi}${dpis.length && lo < 150 ? ' · soft' : ''}</b></div>
+    <div><span>Paper needed</span><b>${paper}</b></div>`;
+  const noBack = spec.duplex ? spec.items.reduce((n, it) => n + (it.back ? 0 : Math.max(1, it.copies || 1)), 0) : 0;
+  const warns = layout.warnings.map((w) => `<div>⚠ ${escapeHtml(w)}</div>`);
+  if (noBack) warns.push(`<div>⚠ ${noBack === 1 ? '1 piece has' : `${noBack} pieces have`} no back and will print blank on the reverse. <button type="button" class="ws-link" data-act="show-noback">Show</button></div>`);
+  els.warnings.hidden = !warns.length;
+  els.warnings.innerHTML = warns.join('');
   els.build.disabled = busy || !layout.count;
 }
 
@@ -178,11 +244,40 @@ function splitSlot(slotIndex) {
   return -1;
 }
 
+// The preview shows one page at a time, as large as the stage allows; the pager and Fronts / Backs choose which.
+function currentPage(layout) {
+  const per = layout.duplex ? 2 : 1, n = Math.ceil(layout.pages.length / per);
+  view.sheet = Math.max(0, Math.min(n - 1, view.sheet));
+  if (!layout.duplex) view.side = 'front';
+  return { pg: layout.pages[view.sheet * per + (view.side === 'back' ? 1 : 0)], n };
+}
+function fitStage() {
+  const c = els.preview.querySelector('.canvas');
+  if (!c) return;
+  const w = Number(c.dataset.w), h = Number(c.dataset.h);
+  const k = Math.min(els.preview.clientWidth / w, els.preview.clientHeight / h);
+  if (!(k > 0)) return;
+  c.style.width = `${Math.floor(w * k)}px`; c.style.height = `${Math.floor(h * k)}px`;
+}
+new ResizeObserver(fitStage).observe(els.preview);
+
 function renderPreview(layout) {
-  if (!layout.count) { els.preview.innerHTML = '<div class="empty small" data-drop-end="1">Click or drag images from the picker onto the sheet (or drop files from the media folder in Finder). Drag pieces between slots to rearrange them. The preview shows exactly how the PDF pages will print.</div>'; return; }
+  const size = `${round3(layout.page.width)} × ${round3(layout.page.height)} in`;
+  els.pager.hidden = !layout.count; els.sideSeg.hidden = !layout.count || !layout.duplex;
+  $('view').classList.toggle('tall', layout.page.height > layout.page.width);   // a portrait page leaves room beside it for the print check
+  if (!layout.count) {
+    els.preview.innerHTML = `<div class="canvas ws-blank" data-drop-end="1" data-w="${layout.page.width}" data-h="${layout.page.height}"><div><b>Your sheet is empty</b><span>Click a picture on the left and it lands here. The layout adjusts as you add more.</span></div></div>`;
+    els.previewMeta.textContent = `${size} · this is exactly what prints`;
+    fitStage(); return;
+  }
+  const { pg: shown, n } = currentPage(layout);
+  els.pagerLabel.textContent = `${layout.duplex ? 'Sheet' : 'Page'} ${view.sheet + 1} of ${n}`;
+  els.prev.disabled = view.sheet === 0; els.next.disabled = view.sheet >= n - 1;
+  for (const b of els.sideSeg.querySelectorAll('button')) { b.classList.toggle('on', b.dataset.side === view.side); b.setAttribute('aria-pressed', b.dataset.side === view.side); }
+  els.previewMeta.textContent = layout.duplex ? `${shown.side === 'front' ? 'Fronts' : 'Backs'} of sheet ${shown.of}${shown.side === 'back' ? `, mirrored for the ${spec.flip}-edge flip` : ''} · ${size}` : `${size} · this is exactly what prints`;
   const { page } = layout;
   const S = 40; // px per inch in the preview
-  els.preview.innerHTML = layout.pages.map((pg) => {
+  els.preview.innerHTML = [shown].map((pg) => {
     const W = page.width * S, H = page.height * S;
     const parts = [`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
     const zones = [];
@@ -216,34 +311,52 @@ function renderPreview(layout) {
       parts.push('</g>');
     }
     if (spec.cutMarks) for (const [ax, ay, bx, by] of edgeMarks(layout, pg)) parts.push(`<line x1="${ax * S}" y1="${ay * S}" x2="${bx * S}" y2="${by * S}" stroke="#555" stroke-width="0.75"/>`);
-    const cap = layout.duplex
-      ? `Sheet ${pg.of} · ${pg.side === 'front' ? 'front' : `back (mirrored for ${spec.flip}-edge flip)`}`
-      : `Page ${pg.number} of ${layout.pages.length}`;
-    return `<figure class="page-preview ${pg.side}"><div class="canvas" data-side="${pg.side}" data-canvas="1"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${parts.join('')}</svg>${zones.join('')}</div><figcaption>${cap} · ${round3(page.width)} × ${round3(page.height)} in</figcaption></figure>`;
+    return `<figure class="page-preview ${pg.side}"><div class="canvas" data-side="${pg.side}" data-canvas="1" data-w="${page.width}" data-h="${page.height}"><svg viewBox="0 0 ${W} ${H}" width="100%" height="100%">${parts.join('')}</svg>${zones.join('')}</div></figure>`;
   }).join('');
+  fitStage();
 }
 
+// "On this sheet": the pieces as a strip of thumbnails in print order, grouped by the page they start on.
+// Click one to see its details (copies, move, remove) under the strip.
 function renderItems() {
-  const prints = spec.items.reduce((n, it) => n + (it.copies || 1), 0);
-  els.itemsMeta.textContent = spec.items.length ? `${spec.items.length} image${spec.items.length === 1 ? '' : 's'} · ${prints} print${prints === 1 ? '' : 's'} · drag to reorder` : '';
+  const prints = spec.items.reduce((n, it) => n + Math.max(1, it.copies || 1), 0);
+  els.itemsMeta.textContent = spec.items.length ? `${plural(prints, 'piece')}${spec.duplex ? '' : ' · drag to reorder'}` : '';
   els.allBack.hidden = !spec.duplex || !spec.items.length;
-  if (!spec.items.length) { els.items.innerHTML = '<div class="empty small drop-end" data-drop-end="1">Nothing on the sheet yet. Drop images here.</div>'; return; }
-  els.items.innerHTML = spec.items.map((it, i) => {
+  els.clear.hidden = !spec.items.length;
+  if (selItem != null && !spec.items[selItem]) selItem = null;
+  if (!spec.items.length) { els.items.innerHTML = '<div class="ws-strip-empty" data-drop-end="1">Pieces you add line up here, in print order.</div>'; renderPiece(); return; }
+  const per = layout.cols * layout.rows, groups = [];
+  let slot = 0;
+  spec.items.forEach((it, i) => {
+    const pg = Math.floor(slot / per), c = Math.max(1, it.copies || 1);
+    slot += c;
     const img = imagesById.get(itemKey(it));
     const back = it.back ? imagesById.get(itemKey(it.back)) : null;
-    return `<div class="sheet-item" data-i="${i}" draggable="true">
-      <span class="grip" title="Drag to reorder">⋮⋮</span>
-      <img src="${img?.thumbUrl ? escapeHtml(img.thumbUrl) : ''}" alt="">
-      <div class="sheet-item-meta"><b title="${escapeHtml(it.rel)}">${escapeHtml(img?.name || it.rel)}</b><span>${img ? `${img.width} × ${img.height} px · ${sourceLabel(it.source)}${img.folder ? ` / ${escapeHtml(img.folder)}` : ''}` : 'not found on disk'}</span></div>
-      ${spec.duplex ? `<div class="back-zone ${it.back ? 'set' : ''} ${armedBack === i ? 'armed' : ''}" data-back="${i}" ${it.back ? 'draggable="true"' : ''} title="${it.back ? `Back: ${escapeHtml(it.back.rel)} — click to change, ✕ to clear` : 'Drop an image or a front piece here for the back side, or click then pick one'}">
-        ${back ? `<img src="${escapeHtml(back.thumbUrl || back.url)}" alt="">` : '<span>back</span>'}${it.back ? '<button data-act="clear-back" title="Remove the back image">✕</button>' : ''}
+    const html = `<div class="sheet-item ${selItem === i ? 'sel' : ''}" data-i="${i}" draggable="true" title="${escapeHtml(img?.name || it.rel)}${img ? ` — ${img.width} × ${img.height} px` : ' — not found on disk'} · click for details, drag to reorder">
+      <img src="${img?.thumbUrl ? escapeHtml(img.thumbUrl) : ''}" alt="" draggable="false">
+      ${c > 1 ? `<span class="n">×${c}</span>` : ''}
+      <button type="button" data-act="remove" title="Remove from the sheet" aria-label="Remove">✕</button>
+      ${spec.duplex ? `<div class="back-zone ${it.back ? 'set' : ''} ${armedBack === i ? 'armed' : ''}" data-back="${i}" ${it.back ? 'draggable="true"' : ''} title="${it.back ? `Back: ${escapeHtml(it.back.rel)} — click to change, ✕ to clear` : 'Drop a picture or a front piece here for the back side, or click then pick one'}">
+        ${back ? `<img src="${escapeHtml(back.thumbUrl || back.url)}" alt="" draggable="false">` : '<span>+ back</span>'}${it.back ? '<button type="button" data-act="clear-back" title="Remove the back picture" aria-label="Remove the back">✕</button>' : ''}
       </div>` : ''}
-      <label class="copies" title="How many copies to print">×<input type="number" min="1" max="50" value="${it.copies || 1}" data-act="copies"></label>
-      <button class="btn small" data-act="up" title="Move earlier" ${i === 0 ? 'disabled' : ''}>↑</button>
-      <button class="btn small" data-act="down" title="Move later" ${i === spec.items.length - 1 ? 'disabled' : ''}>↓</button>
-      <button class="btn small danger" data-act="remove" title="Remove from the sheet">✕</button>
     </div>`;
-  }).join('') + '<div class="drop-end" data-drop-end="1">Drop here to add at the end</div>';
+    (groups[pg] ||= []).push(html);
+  });
+  els.items.innerHTML = groups.map((g, pg) => (g ? `<div class="ws-pg"><span>${spec.duplex ? 'Sheet' : 'Page'} ${pg + 1}</span><div>${g.join('')}</div></div>` : '')).join('')
+    + '<div class="drop-end" data-drop-end="1">Drop here to add at the end</div>';
+  renderPiece();
+}
+function renderPiece() {
+  const it = selItem == null ? null : spec.items[selItem];
+  els.piece.hidden = !it;
+  if (!it) { els.piece.innerHTML = ''; return; }
+  const img = imagesById.get(itemKey(it));
+  els.piece.innerHTML = `
+    <div class="sheet-item-meta"><b title="${escapeHtml(it.rel)}">${escapeHtml(img?.name || it.rel)}</b><span>${img ? `${img.width} × ${img.height} px · ${escapeHtml(sourceLabel(it.source))}${img.folder ? ` / ${escapeHtml(img.folder)}` : ''}` : 'not found on disk'}</span></div>
+    <label class="copies" title="How many copies to print">Copies <input type="number" min="1" max="50" value="${Math.max(1, it.copies || 1)}" data-act="copies"></label>
+    <button class="btn small" type="button" data-act="up" title="Move earlier" ${selItem === 0 ? 'disabled' : ''}>‹ Earlier</button>
+    <button class="btn small" type="button" data-act="down" title="Move later" ${selItem === spec.items.length - 1 ? 'disabled' : ''}>Later ›</button>
+    <button class="btn small danger" type="button" data-act="remove" title="Remove from the sheet">Remove</button>`;
 }
 
 function sourceLabel(id) { return sources.find((s) => s.id === id)?.label || id; }
@@ -272,9 +385,11 @@ function renderPicker() {
         </div>`;
       }).join('')}</div></div>`;
   }).join('') || '<div class="empty small">No images match.</div>';
-  els.pickerHint.textContent = armedBack != null
-    ? `Click an image to use it as the back of #${armedBack + 1} (Esc to cancel)`
-    : `${shown} image${shown === 1 ? '' : 's'} · click to add (again for another piece) · drag onto a slot, a back zone, or the list`;
+  els.pickerCount.textContent = `${shown} found`;
+  els.pickerHint.textContent = armedBack != null ? `Click a picture to use it as the back of piece ${armedBack + 1} (Esc to cancel).`
+    : spec.items.length ? 'The number shows how many copies are on the sheet. Click again to add another.'
+      : 'Click a picture to add it. Click again for another copy, or drag it onto a slot.';
+  for (const b of els.folderChips.querySelectorAll('button')) { b.classList.toggle('on', b.dataset.v === only); b.setAttribute('aria-pressed', b.dataset.v === only); }
   els.picker.classList.toggle('arming', armedBack != null);
 }
 
@@ -283,8 +398,19 @@ function addImage(id, at) {
   const img = imagesById.get(id);
   if (!img) return;
   if (spec.items.length >= config.sheets.maxItems) return setStatus(`At most ${config.sheets.maxItems} images per sheet.`, 'error');
-  spec.items.splice(at == null ? spec.items.length : at, 0, { source: img.source, rel: img.rel, copies: 1, back: null });
+  const i = at == null ? spec.items.length : at;
+  spec.items.splice(i, 0, { source: img.source, rel: img.rel, copies: 1, back: null });
+  selItem = null;
   update();
+  showPiece(i);
+}
+// Turn the preview to the page a piece is on.
+function showPiece(i, side) {
+  if (!layout || !spec.items[i]) return;
+  const to = Math.floor(firstSlotOfItem(i) / (layout.cols * layout.rows));
+  if (to === view.sheet && (!side || side === view.side)) return;
+  view.sheet = to; if (side) view.side = side;
+  renderPreview(layout);
 }
 function setBack(i, id) {
   const img = imagesById.get(id);
@@ -379,6 +505,7 @@ document.addEventListener('drop', (e) => {
   }
   if (!d || !t) return;
   e.preventDefault(); clearDropHints();
+  selItem = null;
   const img = imagesById.get(d.id);
   if (!img) return;
   const isMove = d.kind === 'item';   // only front pieces move; picker images and backs are copied
@@ -387,7 +514,7 @@ document.addEventListener('drop', (e) => {
   if (t.matches('[data-drop-end]')) { if (isMove) moveItem(d.index, spec.items.length); else addImage(d.id, spec.items.length); return; }
   if (t.matches('.sheet-item')) {
     const i = Number(t.dataset.i);
-    const before = e.clientY < t.getBoundingClientRect().top + t.offsetHeight / 2;
+    const before = e.clientX < t.getBoundingClientRect().left + t.offsetWidth / 2;
     if (isMove) moveItem(d.index, before ? i : i + 1); else addImage(d.id, before ? i : i + 1);
     return;
   }
@@ -421,29 +548,27 @@ async function loadImages() {
     sources = data.sources;
     imagesById.clear();
     for (const s of sources) for (const im of s.images) imagesById.set(im.id, im);
+    const keep = els.sourceFilter.value;
     els.sourceFilter.innerHTML = '<option value="">All folders</option>' + sources.map((s) => `<option value="${s.id}">${escapeHtml(s.label)} (${s.images.length})</option>`).join('');
+    els.sourceFilter.value = sources.some((s) => s.id === keep) ? keep : '';
+    els.folderChips.innerHTML = `<button type="button" data-v="">All · ${imagesById.size}</button>` + sources.map((s) => `<button type="button" data-v="${escapeHtml(s.id)}" title="${escapeHtml(s.dir)}">${escapeHtml(s.label)} · ${s.images.length}</button>`).join('');
   } finally { els.refresh.disabled = false; }
 }
 async function loadSheets() {
   sheets = await api('GET', '/api/sheets');
-  els.sheetSelect.innerHTML = '<option value="">Open a saved sheet…</option>' + sheets.map((s) => `<option value="${s.id}">${escapeHtml(s.name)} · ${s.spec.items.length} img${s.spec.duplex ? ' · 2-sided' : ''}${s.lastRender ? ' · PDF' : ''}</option>`).join('');
-  els.sheetSelect.value = sheetId || '';
-  els.deleteSheet.disabled = !sheetId;
 }
 function openSheet(s) {
-  sheetId = s.id; armedBack = null;
+  sheetId = s.id; armedBack = null; selItem = null; view.sheet = 0; view.side = 'front';
   els.name.value = s.name;
   spec = { ...DEFAULT_SPEC, ...s.spec, items: (s.spec.items || []).map((it) => ({ ...it, back: it.back || null })) };
   writeForm(); renderRender(s.lastRender);
-  els.deleteSheet.disabled = false; els.sheetSelect.value = s.id;
   update();
 }
 function newSheet() {
-  sheetId = null; armedBack = null;
+  sheetId = null; armedBack = null; selItem = null; view.sheet = 0; view.side = 'front';
   els.name.value = '';
   spec = { ...DEFAULT_SPEC, items: [] };
   writeForm(); renderRender(null);
-  els.sheetSelect.value = ''; els.deleteSheet.disabled = true;
   setStatus('');
   update();
 }
@@ -452,15 +577,27 @@ function renderRender(r) {
   if (!r) { els.render.innerHTML = ''; return; }
   const low = r.embedded.filter((e) => e.downscaled).length;
   els.render.innerHTML = `
-    <div class="render-head"><b>PDF ready</b><span class="hint">${new Date(r.at).toLocaleString()}</span></div>
-    <div class="actions">
+    <div class="render-head"><b>PDF ready</b><span class="hint">${new Date(r.at).toLocaleString()}</span><span class="spacer"></span>
       <a class="btn small" href="${escapeHtml(r.url)}" target="_blank">Open PDF</a>
       <a class="btn small" href="${escapeHtml(r.url)}" download="${escapeHtml(r.file)}">⬇ Download</a>
       <button class="btn small" id="reveal" type="button">Reveal in Finder</button>
     </div>
     <div class="render-meta">${r.pages} page${r.pages === 1 ? '' : 's'}${r.duplex ? ` (${r.pages / 2} double-sided sheet${r.pages === 2 ? '' : 's'})` : ''} · ${r.images} image${r.images === 1 ? '' : 's'} · ${r.grid} on ${r.page} · ${fmtBytes(r.bytes)} · ${(r.ms / 1000).toFixed(1)} s${low ? ` · ${low} image${low === 1 ? '' : 's'} downscaled to the DPI cap` : ''}</div>
-    <div class="hint">Saved as output/sheets/${escapeHtml(r.file)}. At FedEx Office print at 100% / “actual size” (not “fit to page”)${r.duplex ? `, <b>double-sided, flip on the ${spec.flip} edge</b>` : ''}.</div>`;
+    <div class="hint">Saved as output/sheets/${escapeHtml(r.file)}. At the print shop, print at 100% / “actual size” (not “fit to page”)${r.duplex ? `, <b>double-sided, flip on the ${spec.flip} edge</b>` : ''}.</div>`;
   $('reveal').onclick = () => api('POST', `/api/sheets/${encodeURIComponent(sheetId)}/reveal`).catch((e) => setStatus(e.message, 'error'));
+}
+// Save the sheet without building its PDF.
+async function save() {
+  if (busy || !spec.items.length) return;
+  try {
+    const name = els.name.value.trim() || `Sheet ${new Date().toLocaleDateString()}`;
+    els.name.value = name;
+    const s = await api('POST', '/api/sheets', { id: sheetId, name, spec });
+    sheetId = s.id;
+    await loadSheets();
+    update();
+    setStatus('Saved.', 'ok');
+  } catch (e) { setStatus(escapeHtml(e.message), 'error'); }
 }
 async function build() {
   if (busy || !spec.items.length) return;
@@ -472,7 +609,9 @@ async function build() {
     const s = await api('POST', '/api/sheets/render', { id: sheetId, name, spec });
     sheetId = s.id;
     renderRender(s.lastRender);
+    els.render.scrollIntoView({ block: 'nearest' });
     await loadSheets();
+    renderHead();
     syncUrl();
     setStatus(`Built ${s.lastRender.pages} page${s.lastRender.pages === 1 ? '' : 's'} (${fmtBytes(s.lastRender.bytes)}).`, 'ok');
     window.dvShell?.flyby?.('Wheels up. Your PDF is ready.');
@@ -486,21 +625,58 @@ for (const el of [els.page, els.orientation, els.customWidth, els.customHeight, 
   el.addEventListener('input', update);
   el.addEventListener('change', update);
 }
-els.name.addEventListener('input', saveDraft);
+els.name.addEventListener('input', () => { saveDraft(); renderHead(); });
+els.name.addEventListener('keydown', (e) => { if (e.key === 'Enter') els.name.blur(); });
 els.search.addEventListener('input', () => { renderPicker(); syncUrl(); });
 els.sourceFilter.addEventListener('change', () => { renderPicker(); syncUrl(); });
 els.refresh.addEventListener('click', async () => { await loadImages(); update(); });
-els.clear.addEventListener('click', () => { spec.items = []; armedBack = null; update(); });
+els.clear.addEventListener('click', () => { spec.items = []; armedBack = null; selItem = null; update(); });
 els.build.addEventListener('click', build);
-els.newSheet.addEventListener('click', newSheet);
-els.sheetSelect.addEventListener('change', async () => {
-  const id = els.sheetSelect.value;
-  if (!id) return newSheet();
-  try { openSheet(await api('GET', `/api/sheets/${encodeURIComponent(id)}`)); } catch (e) { setStatus(e.message, 'error'); }
+// Faces for the hidden selects (orientation, grid, flip), the folder chips and the spacing presets.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-for] button[data-v]');
+  if (!b) return;
+  const sel = $(b.parentElement.dataset.for);
+  if (sel.value === b.dataset.v) return;
+  sel.value = b.dataset.v; sel.dispatchEvent(new Event('change'));
 });
-els.deleteSheet.addEventListener('click', async () => {
-  if (!sheetId || !confirm('Delete this saved sheet and its PDF? Source images are not touched.')) return;
-  try { await api('DELETE', `/api/sheets/${encodeURIComponent(sheetId)}`); newSheet(); await loadSheets(); } catch (e) { setStatus(e.message, 'error'); }
+els.folderChips.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  els.sourceFilter.value = b.dataset.v; renderPicker(); syncUrl();
+});
+els.spacingSeg.addEventListener('click', (e) => {
+  const p = SPACING[e.target.closest('button')?.dataset.preset];
+  if (!p) return;
+  if (p.margin == null) { els.margin.focus(); els.margin.select(); return; }
+  els.margin.value = p.margin; els.gutter.value = p.gutter; update();
+});
+els.prev.addEventListener('click', () => { view.sheet -= 1; renderPreview(layout); });
+els.next.addEventListener('click', () => { view.sheet += 1; renderPreview(layout); });
+els.sideSeg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { view.side = b.dataset.side; renderPreview(layout); } });
+els.warnings.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-act="show-noback"]')) return;
+  const i = spec.items.findIndex((it) => !it.back);
+  if (i >= 0) { selItem = i; renderItems(); showPiece(i, 'back'); }
+});
+// The Sheets menu: new, save, open a saved sheet, delete.
+const closeMenu = () => { els.sheetsPop.hidden = true; els.sheetsBtn.setAttribute('aria-expanded', 'false'); };
+els.sheetsBtn.addEventListener('click', () => { const open = els.sheetsPop.hidden; els.sheetsPop.hidden = !open; els.sheetsBtn.setAttribute('aria-expanded', String(open)); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.ws-menu')) closeMenu(); });
+els.sheetsPop.addEventListener('click', async (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled) return;
+  closeMenu();
+  try {
+    if (b.dataset.open) { if (b.dataset.open !== sheetId) openSheet(await api('GET', `/api/sheets/${encodeURIComponent(b.dataset.open)}`)); }
+    else if (b.dataset.act === 'new') newSheet();
+    else if (b.dataset.act === 'save') await save();
+    else if (b.dataset.act === 'delete') {
+      if (!sheetId || !confirm('Delete this saved sheet and its PDF? Source pictures are not touched.')) return;
+      await api('DELETE', `/api/sheets/${encodeURIComponent(sheetId)}`);
+      await loadSheets(); newSheet();
+    }
+  } catch (err) { setStatus(escapeHtml(err.message), 'error'); }
 });
 els.picker.addEventListener('click', (e) => {
   if (e.target.closest('a.open')) return;
@@ -514,25 +690,33 @@ els.items.addEventListener('click', (e) => {
   const i = Number(row.dataset.i);
   const btn = e.target.closest('button[data-act]');
   if (btn) {
-    const act = btn.dataset.act;
-    if (act === 'remove') { spec.items.splice(i, 1); armedBack = null; }
-    else if (act === 'up' && i > 0) [spec.items[i - 1], spec.items[i]] = [spec.items[i], spec.items[i - 1]];
-    else if (act === 'down' && i < spec.items.length - 1) [spec.items[i + 1], spec.items[i]] = [spec.items[i], spec.items[i + 1]];
-    else if (act === 'clear-back') spec.items[i].back = null;
+    if (btn.dataset.act === 'remove') { spec.items.splice(i, 1); armedBack = null; selItem = null; }
+    else if (btn.dataset.act === 'clear-back') spec.items[i].back = null;
     update();
     return;
   }
-  if (e.target.closest('.back-zone')) { armedBack = armedBack === i ? null : i; renderItems(); renderPicker(); }
+  if (e.target.closest('.back-zone')) { armedBack = armedBack === i ? null : i; renderItems(); renderPicker(); return; }
+  selItem = selItem === i ? null : i;
+  renderItems();
+  if (selItem != null) { showPiece(i); els.piece.scrollIntoView({ block: 'nearest' }); }
 });
-els.items.addEventListener('change', (e) => {
+els.piece.addEventListener('click', (e) => {
+  const act = e.target.closest('button[data-act]')?.dataset.act, i = selItem;
+  if (!act || i == null) return;
+  if (act === 'remove') { spec.items.splice(i, 1); armedBack = null; selItem = null; }
+  else if (act === 'up' && i > 0) { [spec.items[i - 1], spec.items[i]] = [spec.items[i], spec.items[i - 1]]; selItem = i - 1; }
+  else if (act === 'down' && i < spec.items.length - 1) { [spec.items[i + 1], spec.items[i]] = [spec.items[i], spec.items[i + 1]]; selItem = i + 1; }
+  update();
+});
+els.piece.addEventListener('change', (e) => {
   const input = e.target.closest('input[data-act="copies"]');
-  if (!input) return;
-  const i = Number(input.closest('.sheet-item').dataset.i);
-  spec.items[i].copies = Math.max(1, Math.min(50, Math.floor(Number(input.value) || 1)));
+  if (!input || selItem == null) return;
+  spec.items[selItem].copies = Math.max(1, Math.min(50, Math.floor(Number(input.value) || 1)));
   update();
 });
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); build(); }
+  if (e.key === 'Escape') closeMenu();
   if (e.key === 'Escape' && armedBack != null) { armedBack = null; renderItems(); renderPicker(); }
 });
 
@@ -542,6 +726,16 @@ document.addEventListener('keydown', (e) => {
     config = await api('GET', '/api/config');
     els.page.innerHTML = config.sheets.pageSizes.map((p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join('');
     els.grid.innerHTML = config.sheets.grids.map((g) => `<option value="${g.id}">${escapeHtml(g.label)}</option>`).join('');
+    els.gridTiles.innerHTML = config.sheets.grids.map((g) => {
+      const m = /^(\d+)x(\d+)$/.exec(g.id);
+      if (!m) return `<button type="button" data-v="${g.id}" title="${escapeHtml(g.label)}"><span>${g.id === 'auto' ? 'Auto' : 'Custom'}</span></button>`;
+      const c = Number(m[1]), r = Number(m[2]), w = (14 - (c - 1) * 1.5) / c, h = (18 - (r - 1) * 1.5) / r;
+      let cells = '';
+      for (let x = 0; x < c; x++) for (let y = 0; y < r; y++) cells += `<rect x="${(x * (w + 1.5)).toFixed(2)}" y="${(y * (h + 1.5)).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"/>`;
+      return `<button type="button" data-v="${g.id}" title="${escapeHtml(g.label)}"><svg viewBox="0 0 14 18" aria-hidden="true">${cells}</svg><span>${c * r}</span></button>`;
+    }).join('');
+    // With the shell on, the sheet's name is the page title and the bar's actions sit in the header.
+    if (window.dvShell) { window.dvShell.setHead({ title: $('ws-name'), sub: '' }); window.dvShell.actions.append(...$('ws-actions').children); $('ws-bar').hidden = true; }
     const tidy = (d) => String(d).replace(/^\/(Users|home)\/[^/]+\//, '~/');
     els.topbar.textContent = `PDFs are saved in ${tidy(config.outputDir)}/sheets`;
     els.topbar.title = `Pictures come from:\n${config.sheets.sources.map((s) => s.dir).join('\n')}\n\nPDFs are saved in ${config.outputDir}/sheets`;
