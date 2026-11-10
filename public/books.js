@@ -917,31 +917,9 @@ function renderScript() {
   ].join('');
 }
 
-// Narration recorded in Flash Cards: play the whole story, each page scrolling into view as its track starts.
-function playStory(btn) {
-  const tracks = [...els.preview.querySelectorAll('audio.spread-audio')];
-  const playing = tracks.find((t) => !t.paused);
-  if (playing) { playing.pause(); btn.textContent = '▶ Play the story'; return; }
-  const from = Math.max(0, tracks.findIndex((t) => t.currentTime > 0 && !t.ended));
-  const play = (i) => {
-    const t = tracks[i];
-    if (!t) { btn.textContent = '▶ Play the story'; for (const x of tracks) x.currentTime = 0; return; }
-    t.closest('.spread').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    t.onended = () => play(i + 1);
-    t.play().catch(() => { btn.textContent = '▶ Play the story'; });
-  };
-  btn.textContent = '⏸ Pause';
-  play(from);
-}
 function renderPreview() {
   renderReadBar(); renderScript();
   els.preview.innerHTML = '';
-  document.getElementById('play-story')?.remove();
-  if (book.pages.some((p) => p.audio)) {
-    const b = document.createElement('button'); b.id = 'play-story'; b.type = 'button'; b.className = 'btn primary'; b.textContent = '▶ Play the story';
-    b.onclick = () => playStory(b);
-    els.readBar.prepend(b);
-  }
   let chapter = '';
   for (const p of book.pages) {
     // A book copied from a card story has no cover art of its own: show a title page instead of repeating page 1.
@@ -964,7 +942,6 @@ function renderPreview() {
     d.innerHTML = `<div class="spread-art">${img ? `<img src="${img}" alt="${escapeHtml(words)}">` : `<div class="art-empty">${pageLabel(p)} — no picture yet</div>`}</div>
       ${mode === 'below' ? `<div class="spread-text">${p.kind === 'cover' ? `<h1>${escapeHtml(book.title)}</h1>` : escapeHtml(p.text || p.beat).replace(/\n/g, '<br>')}</div>` : ''}
       <div class="spread-num">${p.kind === 'cover' ? '' : p.n}</div>
-      ${p.audio ? `<audio class="spread-audio" controls preload="none" src="${escapeHtml(p.audio)}"></audio>` : ''}
       ${img ? `<a class="spread-dl" href="${img}" download="${escapeHtml(pageFileName(p))}" title="Download ${escapeHtml(pageFileName(p))}">⬇ ${escapeHtml(pageFileName(p))}</a>` : ''}`;
     els.preview.appendChild(d);
     if (mode === 'over' && words) typesetPage(d.querySelector('.spread-art'), p).catch(() => {});

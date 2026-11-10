@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 
 // Minimal zip writer (stored, no compression: the entries are already-compressed images plus a little text).
-export function zipStore(entries) {
+function zipStore(entries) {
   const d = new Date();
   const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
   const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();

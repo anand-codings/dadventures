@@ -14,7 +14,7 @@ const els = {
   seriesEmpty: $('series-empty'), series: $('series'), title: $('title'), logline: $('logline'), styleGuide: $('style-guide'), storyBox: $('story-box'), spine: $('spine'), refrain: $('refrain'), hiddenFriend: $('hidden-friend'), script: $('script'), planInstructions: $('plan-instructions'), replan: $('replan'),
   addCast: $('add-cast'), cast: $('cast'), cardsMeta: $('cards-meta'), cards: $('cards'), addCard: $('add-card'),
   basedOn: $('based-on'), basedOnField: $('based-on-field'), redrawStale: $('redraw-stale'), viewToggle: $('view-toggle'), board: $('board'), boardGrid: $('board-grid'), boardFoot: $('board-foot'),
-  continuity: $('continuity'), checkBook: $('check-book'), makeBacks: $('make-backs'), voice: $('voice'), narrate: $('narrate'), audioZip: $('audio-zip'), audioState: $('audio-state'), introAudio: $('intro-audio'),
+  continuity: $('continuity'), checkBook: $('check-book'), makeBacks: $('make-backs'),
 };
 
 let config = null;
@@ -476,7 +476,7 @@ async function loadSeriesList() {
 async function openSeries(id) {
   await flush();
   series = id ? await api('GET', `/api/cards/series/${id}`).catch(() => null) : null;
-  focusCard = null; view = 'cards'; voicePick = null;
+  focusCard = null; view = 'cards';
   if (series) localStorage.setItem(LAST_SERIES, series.id); else localStorage.removeItem(LAST_SERIES);
   els.seriesSelect.value = series?.id || '';
   writeBrief(); renderSeries();
@@ -530,7 +530,7 @@ function refreshFlow() {
   els.redrawStale.textContent = `↻ Redraw ${plural(stale, 'changed card')}${est ? ` (≈ ${fmtCost(est * stale)})` : ''}`;
   els.viewToggle.hidden = tab !== 'series' || !cards.some((c) => c.title);
   for (const b of els.viewToggle.children) b.classList.toggle('on', b.dataset.view === view);
-  els.checkBook.disabled = busy; if (series?.cards.length && view !== 'board') renderAudio();
+  els.checkBook.disabled = busy;
   for (const b of els.boardFoot.querySelectorAll('[data-b=approve], [data-b=sketch-all], [data-b=places]')) b.disabled = busy || (b.dataset.b === 'approve' && unwritten().length > 0);
   const undrafted = cards.filter((c) => c.title && !c.imageId).length;
   els.draftAll.hidden = tab !== 'series' || !undrafted; els.draftAll.disabled = busy; els.draftAll.textContent = `✏️ Draft storyboard (${plural(undrafted, 'quick sketch')})`;
@@ -728,7 +728,7 @@ function renderSeries() {
   els.series.hidden = !series?.cards.length || view === 'board'; els.board.hidden = !series?.cards.length || view !== 'board';
   if (!series?.cards.length) return;
   if (view === 'board') { for (const b of els.viewToggle.children) b.classList.toggle('on', b.dataset.view === view); return renderBoard(); }
-  renderContinuity(); renderAudio();
+  renderContinuity();
   els.title.value = series.title; els.logline.value = series.logline; els.styleGuide.value = series.styleGuide;
   els.storyBox.hidden = series.brief.kind !== 'story';
   els.world.value = series.world || '';
@@ -744,27 +744,6 @@ function renderSeries() {
   renderCast(); renderCards();
 }
 for (const [el, k] of [[els.title, 'title'], [els.logline, 'logline'], [els.styleGuide, 'styleGuide'], [els.spine, 'spine'], [els.world, 'world'], [els.refrain, 'refrain'], [els.hiddenFriend, 'hiddenFriend']]) el.addEventListener('input', () => queue({ [k]: el.value }));
-
-// Narration: what is recorded, what is out of date, and the download for a Yoto card.
-const audioUrl = (key) => { const a = series.audio?.tracks?.[key]; return a ? `/output/cards/audio/${series.id}/${encodeURIComponent(a.file)}` : ''; };
-function renderAudio() {
-  const a = series.audio, written = series.cards.filter((c) => c.title).length;
-  els.voice.value = voicePick || a?.voice || 'coral';
-  const stale = a ? (a.stale || []).length : 0, have = a ? Object.keys(a.tracks).length : 0, secs = a ? Object.values(a.tracks).reduce((n, t) => n + (t.seconds || 0), 0) : 0;
-  els.narrate.disabled = busy || !written;
-  els.narrate.textContent = !a ? '🔊 Record the narration' : stale || els.voice.value !== a.voice ? `🔊 Record ${els.voice.value !== a.voice ? 'again in this voice' : plural(stale, 'changed track')}` : '🔊 Narration is up to date';
-  els.audioZip.hidden = !have; els.audioZip.href = `/api/cards/series/${series.id}/audio.zip`;
-  els.audioState.textContent = !a ? (written ? `About ${fmtCost(series.cards.reduce((n, c) => n + words(c.narration), 0) / 150 * 0.015)} for the whole story.` : 'Write the cards first.') : `${plural(have, 'track')}, about ${Math.max(1, Math.round(secs / 60))} min, voice “${a.voice}”.${stale ? ` ${plural(stale, 'track')} out of date: the words changed since recording.` : ''}`;
-  els.introAudio.hidden = !audioUrl('intro'); if (audioUrl('intro') && !els.introAudio.src.endsWith(audioUrl('intro'))) els.introAudio.src = audioUrl('intro');
-}
-let voicePick = null;            // a voice chosen but not recorded yet
-els.voice.addEventListener('change', () => { voicePick = els.voice.value; if (series) renderAudio(); });
-els.narrate.addEventListener('click', () => run('Recording the narration', async (onProgress) => {
-  await flush();
-  const r = await streamApi(`/api/cards/series/${series.id}/narrate`, { voice: els.voice.value }, onProgress);
-  series = r.series; voicePick = null; renderSeries();
-  setStatus(r.recorded ? `Recorded ${plural(r.recorded, 'track')}${r.costUsd ? ` for about ${fmtCost(r.costUsd)}` : ''}. Play any card's track below, or download them all for a Yoto card.` : 'Every track already matches the text.', 'ok');
-}));
 
 function renderContinuity() {
   const k = series.continuity, finals = series.cards.filter((c) => c.imageId && !c.draft);
@@ -912,7 +891,7 @@ function renderCards() {
           ${t?.heroHint || c.hero ? `<textarea data-k="hero" rows="2" placeholder="Main picture">${escapeHtml(c.hero)}</textarea>` : ''}
           ${slots}
           ${story ? `<label class="field"><span>Story on the card <span class="hint">printed under the pictures when “Story on the card” is chosen in Picture settings · ${words(c.storyText)} words</span></span><textarea data-k="storyText" rows="2">${escapeHtml(c.storyText || '')}</textarea></label>` : ''}
-          ${story ? `<label class="field narration"><span>Read aloud <span class="hint">the storyteller's text for this card (not printed on the front) · ${words(c.narration)} words</span></span><textarea data-k="narration" rows="4">${escapeHtml(c.narration || '')}</textarea>${audioUrl(c.id) ? `<audio controls preload="none" src="${escapeHtml(audioUrl(c.id))}"></audio>${(series.audio.stale || []).includes(c.id) ? '<span class="hint">This recording is out of date: the words changed.</span>' : ''}` : ''}</label>` : ''}
+          ${story ? `<label class="field narration"><span>Read aloud <span class="hint">the storyteller's text for this card (not printed on the front) · ${words(c.narration)} words</span></span><textarea data-k="narration" rows="4">${escapeHtml(c.narration || '')}</textarea></label>` : ''}
           <div class="card-titles"><textarea data-k="closing" rows="2" placeholder="Bottom line">${escapeHtml(c.closing)}</textarea><input data-k="source" value="${escapeHtml(c.source)}" placeholder="Source credit (optional)"></div>
           ${chips ? `<div class="p-chars">${chips}</div>` : ''}` : ''}
         <div class="rewrite"><input class="rw-input" placeholder="${c.title ? 'Rewrite: “shorter”, “add a counting fact”, “make panel 2 funnier”…' : 'Optional instructions for the writer'}"><button class="rw-chip rw-go" data-act="write" type="button">${c.title ? '✎ Rewrite' : '✎ Write this card'}</button></div>
@@ -1017,7 +996,6 @@ document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.
     config = await api('GET', '/api/config');
     els.topbar.textContent = config.hasApiKey ? `Cards read by ${config.cards.visionModel} · written by ${config.cards.model}` : '⚠ Add your OpenAI key to .env, then restart';
     fillSelect(els.audience, config.cards.audiences, 'template');
-    fillSelect(els.voice, (config.cards.voices || ['coral']).map((v) => ({ id: v, label: v })), 'coral');
     fillSelect(els.imgModel, config.imageModels, config.defaultImageModel);
     fillSelect(els.imgQuality, config.qualities, 'high');
     fillSelect(els.imgSize, [{ id: '1024x1536', label: '1024 × 1536 — 2:3 portrait (upscale ×4 for print)' }, { id: '2048x3072', label: '2048 × 3072 — 2:3 portrait, 2K' }, { id: '1536x1024', label: '1536 × 1024 — 3:2 landscape' }, { id: '1024x1024', label: '1024 × 1024 — square' }], '1024x1536');
