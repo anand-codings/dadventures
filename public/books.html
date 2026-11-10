@@ -120,6 +120,7 @@
             </div>
             <label class="field check"><span>Text</span><label><input type="checkbox" id="text-in-image"> Draw the text into the picture</label></label>
             <label class="field check"><span>Proofread</span><label title="A second reader checks every new picture against its page (who is in it, where the story says everyone is, stray lettering) and redraws it once if it is wrong. A redraw is a second paid picture."><input type="checkbox" id="proof" checked> Check each picture and redraw once if it is wrong</label></label>
+            <label class="field check"><span>Consistency</span><label title="Each new picture is drawn with pictures beside it: the world sheet if the book has one, and the nearest finished page set in the same place (or, failing that, the nearest finished page for its style). Costs a little more per picture for the extra image input."><input type="checkbox" id="refs" checked> Show the illustrator earlier pages and the world sheet</label></label>
           </div>
         </div>
 
@@ -140,8 +141,14 @@
               <div class="section-title">Storyline <span class="hint">the spine every page hangs on; given to the writer</span></div>
               <div class="storyline" id="storyline"></div>
               <label class="field"><span>World <span class="hint">places and recurring objects; added to every picture prompt</span></span><textarea id="world" rows="2"></textarea></label>
+              <div class="world-sheet" id="world-sheet"></div>
+              <div class="grid2">
+                <label class="field"><span>Refrain <span class="hint">the line a child joins in with, in its exact words; blank for none</span></span><input id="refrain" type="text" maxlength="300"></label>
+                <label class="field"><span>Read-aloud device <span class="hint">counting, a sound word per place, rhyme…; blank for none</span></span><input id="device" type="text" maxlength="300"></label>
+              </div>
               <div class="section-title">Story arc <span class="hint" id="arc-legend"></span></div>
               <div class="arc-bar" id="arc-bar"></div>
+              <div class="shot-bar" id="shot-bar" title="How close each page's picture is. Three in a row at the same distance are marked."></div>
               <div class="section-title">Page by page <span class="hint" id="outline-meta"></span><span class="spacer"></span><button class="btn secondary small" id="fill-details" type="button" hidden title="Fill in the blank planning notes without changing the story">✨ Fill in the blank details</button></div>
               <div class="outline" id="outline"></div>
               <div id="logic-box">
@@ -161,7 +168,8 @@
             </div>
             <!-- Pages -->
             <div id="tab-pages">
-              <div class="section-title">Pages <span class="hint" id="pages-meta"></span></div>
+              <div class="section-title">Pages <span class="hint" id="pages-meta"></span><span class="spacer"></span><button class="btn secondary small" id="edit-pass" type="button" title="A second reader goes through the whole text aloud: word range, rhythm, the refrain, page turns, words that only repeat the picture. It changes words, never the story. ↶ Undo restores the text.">🎧 Read-aloud edit</button></div>
+              <div class="logic" id="edit-box" hidden></div>
               <div class="pages" id="pages"></div>
             </div>
           </div>
