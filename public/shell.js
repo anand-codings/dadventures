@@ -46,7 +46,7 @@
     <div class="dv-runway" aria-hidden="true"></div>
     <nav aria-label="Sections">${groups.map((g) => `<div class="dv-group">${g.name}</div>${g.items.map(navItem).join('')}`).join('')}</nav>
     <div class="dv-spacer"></div>
-    <div class="dv-card"><b>DAD JOKE OF THE DAY</b><span>${esc(here.jokes[day % here.jokes.length])}</span></div>
+    <button class="dv-card dv-joke" type="button" title="Another one"><b>DAD JOKE OF THE DAY</b><span>${esc(here.jokes[day % here.jokes.length])}</span></button>
     <div class="dv-group">${costs.group}</div>
     <div class="dv-card" id="dv-spend" hidden><small>Fuel burned</small><span class="dv-amount"></span><small class="dv-calls"></small></div>
     <nav aria-label="Costs">${navItem(costs)}</nav>`;
@@ -54,7 +54,8 @@
   const head = document.createElement('div');
   head.className = 'dv-head';
   head.innerHTML = `<div class="dv-mascot" id="dv-mascot">${svg(ICONS[here.key])}</div>
-    <div class="dv-titles"><div class="dv-bay">Bay ${here.bay} · ${here.group}</div><h1 class="dv-title">${here.label}</h1><div class="dv-sub">${esc(here.sub)}</div></div>`;
+    <div class="dv-titles"><div class="dv-bay">Bay ${here.bay} · ${here.group}</div><button class="dv-back" type="button" hidden></button><h1 class="dv-title">${here.label}</h1><div class="dv-sub">${esc(here.sub)}</div></div>
+    <div class="dv-actions" id="dv-actions"></div>`;
 
   const main = document.querySelector('main');
   if (!main) return;
@@ -68,20 +69,82 @@
   document.body.dataset.section = here.key;
   document.documentElement.classList.add('dv-on');
 
+  // Pages with a second level (one book, one character) put its name, a way back and its actions in the header bar,
+  // so the bar sits in the same place on every screen. setHead() with no argument restores the section's own header.
+  const bay = head.querySelector('.dv-bay'), backBtn = head.querySelector('.dv-back'), titleEl = head.querySelector('.dv-title'), subEl = head.querySelector('.dv-sub');
+  let onBack = null;
+  backBtn.addEventListener('click', () => onBack && onBack());
+  const mascot = { base: null, over: null };            // the section's guide, or the character the page is about
+  const paintMascot = () => {
+    const m = document.getElementById('dv-mascot'), pic = mascot.over || mascot.base;
+    if (!pic) return;
+    m.style.backgroundImage = `url("${pic.url}")`; m.title = pic.name || ''; m.innerHTML = '';
+  };
+  window.dvShell = {
+    actions: head.querySelector('.dv-actions'),
+    setMascot(pic) { mascot.over = pic || null; paintMascot(); },
+    setHead(o = {}) {
+      onBack = o.back ? o.back.run : null;
+      backBtn.hidden = !o.back; bay.hidden = Boolean(o.back);
+      backBtn.textContent = o.back ? `‹ ${o.back.label}` : '';
+      if (o.title instanceof Node) { if (titleEl.firstChild !== o.title) titleEl.replaceChildren(o.title); } else titleEl.textContent = o.title || here.label;
+      subEl.textContent = o.sub == null ? here.sub : o.sub;
+    },
+  };
+  document.dispatchEvent(new Event('dv-shell'));
+
   // Each section has a guide: one of your own characters, if you have made any.
   fetch('/api/characters').then((r) => (r.ok ? r.json() : [])).then((chars) => {
     const withFace = chars.filter((c) => c.refs && c.refs[0]);
     if (!withFace.length) return;
     const c = withFace[SECTIONS.indexOf(here) % withFace.length];
-    const m = document.getElementById('dv-mascot');
-    m.style.backgroundImage = `url("${c.refs[0].thumbUrl}")`;
-    m.title = c.name;
-    m.innerHTML = '';
+    mascot.base = { url: c.refs[0].thumbUrl, name: c.name };
+    paintMascot();
   }).catch(() => {});
+  // ---------- small pleasures ----------
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const replay = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+  // The joke card deals another joke when pressed, starting with this section's own.
+  const jokes = [...here.jokes, ...SECTIONS.filter((x) => x !== here).flatMap((x) => x.jokes)];
+  let jokeAt = day % here.jokes.length;
+  const jokeCard = side.querySelector('.dv-joke');
+  jokeCard.addEventListener('click', () => {
+    jokeAt = (jokeAt + 1) % jokes.length;
+    jokeCard.querySelector('span').textContent = jokes[jokeAt];
+    replay(jokeCard, 'dv-flip');
+  });
+  // The guide in the header answers back.
+  const LINES = ['Roger that!', 'Wheels up!', 'Cleared for takeoff.', 'Captain Dad approves.', 'Are we there yet?', 'Snack break?', 'Smooth landing, every time.'];
+  let lineAt = Math.floor(Math.random() * LINES.length), sayTimer = 0;
+  const guide = document.getElementById('dv-mascot');
+  guide.addEventListener('click', () => {
+    lineAt = (lineAt + 1) % LINES.length;
+    let say = head.querySelector('.dv-say');
+    if (!say) { say = document.createElement('span'); say.className = 'dv-say'; say.setAttribute('role', 'status'); head.append(say); }
+    say.textContent = LINES[lineAt];
+    replay(say, 'on'); replay(guide, 'dv-hop');
+    clearTimeout(sayTimer); sayTimer = setTimeout(() => say.classList.remove('on'), 2200);
+  });
+  // A plane crosses the page when something worth celebrating lands: a batch of pictures, a finished PDF.
+  window.dvShell.flyby = (text) => {
+    if (calm || document.querySelector('.dv-flyby')) return;
+    const f = document.createElement('div');
+    f.className = 'dv-flyby'; f.setAttribute('aria-hidden', 'true');
+    f.innerHTML = `<span class="dv-banner">${esc(text || 'Wheels up!')}</span><svg viewBox="0 0 24 24"><path d="${PLANE}"/></svg>`;
+    document.body.append(f);
+    f.addEventListener('animationend', () => f.remove());
+  };
+  const countUp = (el, to) => {
+    if (calm || !to) { el.textContent = `$${to.toFixed(2)}`; return; }
+    const t0 = performance.now(), ms = 900;
+    const step = (t) => { const k = Math.min(1, (t - t0) / ms); el.textContent = `$${(to * (1 - (1 - k) ** 3)).toFixed(2)}`; if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  };
+
   fetch('/api/ai/summary').then((r) => (r.ok ? r.json() : null)).then((s) => {
     if (!s) return;
     const box = document.getElementById('dv-spend');
-    box.querySelector('.dv-amount').textContent = `$${s.totalUsd.toFixed(2)}`;
+    countUp(box.querySelector('.dv-amount'), s.totalUsd);
     box.querySelector('.dv-calls').textContent = `${s.calls} call${s.calls === 1 ? '' : 's'} · still cheaper than avgas`;
     box.hidden = false;
   }).catch(() => {});

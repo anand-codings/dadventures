@@ -475,6 +475,7 @@ async function build() {
     await loadSheets();
     syncUrl();
     setStatus(`Built ${s.lastRender.pages} page${s.lastRender.pages === 1 ? '' : 's'} (${fmtBytes(s.lastRender.bytes)}).`, 'ok');
+    window.dvShell?.flyby?.('Wheels up. Your PDF is ready.');
     saveDraft();
   } catch (e) { setStatus(e.message, 'error'); }
   finally { busy = false; els.build.disabled = !spec.items.length; }

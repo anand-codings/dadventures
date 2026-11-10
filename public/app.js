@@ -398,6 +398,7 @@ async function generate() {
     const cost = r.batchCostUsd != null ? ` · ≈ ${fmtCost(r.batchCostUsd)}` : '';
     const tokens = r.usage ? ` · ${r.usage.output_tokens} output tokens` : '';
     setStatus(`Done in ${fmtDuration(r.durationMs)}${cost}${tokens}. Saved to ${config.outputDir}`, 'ok');
+    window.dvShell?.flyby?.(r.images.length > 1 ? `${r.images.length} pictures landed` : 'Fridge-worthy!');
   } catch (e) { stopTimer(); setStatus(`Generation failed: ${e.message}. Your prompts were kept in the prompt log.`, 'error'); }
   finally { els.generate.disabled = false; els.enhance.disabled = false; }
 }
