@@ -6,6 +6,7 @@
   <title>Print Sheets — Dadventures</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%231f8f5f%27/%3E%3Crect x=%2712%27 y=%2712%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2734%27 y=%2712%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2712%27 y=%2734%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3Crect x=%2734%27 y=%2734%27 width=%2718%27 height=%2718%27 fill=%27%23fff%27/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/sheets.css">
   <link rel="stylesheet" href="/theme.css">
   <script src="/shell.js" defer></script>
 </head>
@@ -15,104 +16,112 @@
     <div class="topbar-meta" id="topbar-meta">Loading…</div>
   </header>
 
-  <main class="layout">
-    <section class="panel controls">
-      <div class="library-row">
-        <select id="sheet-select"><option value="">Open a saved sheet…</option></select>
-        <button id="new-sheet" class="btn secondary small" type="button">+ New</button>
-        <button id="delete-sheet" class="btn secondary small" type="button" title="Delete this saved sheet (its PDF is removed; source images are untouched)">✕</button>
+  <main class="layout ws">
+    <!-- The bar holds the sheet's name, the Sheets menu and Build PDF. shell.js lifts its parts into the page header. -->
+    <div class="ws-bar" id="ws-bar">
+      <label class="ws-name" id="ws-name"><input id="name" type="text" placeholder="Untitled sheet" aria-label="Sheet name" title="Click to rename"></label>
+      <div class="ws-bar-actions" id="ws-actions">
+        <span class="ws-chip" id="save-state"></span>
+        <div class="ws-menu">
+          <button class="btn" id="sheets-btn" type="button" aria-haspopup="true" aria-expanded="false">Sheets <span aria-hidden="true">▾</span></button>
+          <div class="ws-pop" id="sheets-pop" hidden></div>
+        </div>
+        <div class="ws-build-meta" id="build-meta"><b></b><small></small></div>
+        <button class="btn primary" id="build" type="button" title="Build the PDF (⌘ Enter)">⬇ Build PDF</button>
       </div>
-      <label class="field"><span>Sheet name</span><input id="name" type="text" placeholder="Ocean animals — 6 up"></label>
+    </div>
 
-      <details class="box" open>
-        <summary>Page</summary>
-        <div class="grid2">
-          <label class="field"><span>Paper size</span><select id="page"></select></label>
-          <label class="field"><span>Orientation</span><select id="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
-        </div>
-        <div class="grid2" id="custom-size" hidden>
-          <label class="field"><span>Width (in)</span><input id="custom-width" type="number" min="2" max="60" step="0.25" value="8.5"></label>
-          <label class="field"><span>Height (in)</span><input id="custom-height" type="number" min="2" max="60" step="0.25" value="11"></label>
-        </div>
-        <div class="size-note" id="page-note"></div>
-      </details>
+    <section class="panel ws-panel ws-pictures" aria-label="Pictures">
+      <div class="ws-title"><i>1</i><h2>Pictures</h2><span class="hint" id="picker-count"></span><button class="btn small quiet" id="refresh" type="button" title="Rescan the folders">↻</button></div>
+      <input id="search" type="search" placeholder="Filter by name or folder…" aria-label="Filter pictures">
+      <div class="ws-chips" id="folder-chips"></div>
+      <select id="source-filter" hidden><option value="">All folders</option></select>
+      <div class="hint" id="picker-hint"></div>
+      <div class="ws-scroll" id="picker"></div>
+      <div class="ws-drop" data-drop-end="1"><b>Drop files from Finder</b><span>They are matched by name to pictures in the media folder</span></div>
+    </section>
 
-      <details class="box" open>
-        <summary>Arrangement</summary>
-        <label class="field"><span>Images per page</span><select id="grid"></select></label>
-        <div class="grid2" id="custom-grid" hidden>
-          <label class="field"><span>Columns</span><input id="cols" type="number" min="1" max="12" value="2"></label>
-          <label class="field"><span>Rows</span><input id="rows" type="number" min="1" max="12" value="2"></label>
-        </div>
-        <div class="grid2">
-          <label class="field"><span>Printer margin (in)</span><input id="margin" type="number" min="0" max="3" step="0.125" value="0.25"></label>
-          <label class="field"><span>Gap between pieces (in)</span><input id="gutter" type="number" min="0" max="4" step="0.125" value="0.5"></label>
-        </div>
-        <div class="size-note">Laminating: keep the gap at ¼–½ in so every piece keeps a sealed border. Cutting on a guillotine without laminating: set the gap to 0 so each cut line is shared, and a margin of ⅜ in so the crop marks at the page edges print (printers cannot print the outer ~0.2 in).</div>
-        <div class="grid2">
-          <label class="field"><span>Fit</span><select id="fit"><option value="contain">Whole image (no cropping)</option><option value="cover">Fill the cell (crop edges)</option></select></label>
-          <label class="field"><span>Image detail</span><select id="max-dpi"><option value="300">300 DPI (print quality)</option><option value="400" selected>400 DPI</option><option value="600">600 DPI (large file)</option><option value="1200">Full resolution</option></select></label>
-        </div>
-        <label class="field"><span>File size</span><select id="encode"><option value="jpeg" selected>Smaller file — JPEG at quality 92 (recommended for uploads)</option><option value="png">Lossless PNG — about 10× larger files</option></select></label>
-        <div class="check-list">
-          <label><input type="checkbox" id="pack"> Pack pieces edge to edge (cells take the pieces' shape; with a 0 gap every cut line is shared)</label>
-          <label><input type="checkbox" id="cut-marks" checked> Crop marks (in the gaps and at the page edges, on every cut line)</label>
-          <label><input type="checkbox" id="outline"> Hairline border around each image (prints on the piece)</label>
-          <label><input type="checkbox" id="label"> Print the sheet name in the bottom margin</label>
-        </div>
-      </details>
-
-      <details class="box" open>
-        <summary>Double-sided</summary>
-        <div class="check-list">
-          <label><input type="checkbox" id="duplex"> Print on both sides (front image + back image per piece)</label>
-        </div>
-        <div id="duplex-options" hidden>
-          <label class="field"><span>Printer flips the sheet on the</span><select id="flip"><option value="long">Long edge (book-style — the FedEx default)</option><option value="short">Short edge (calendar-style)</option></select></label>
-          <label class="field"><span>Back with a different shape</span><select id="back-fit"><option value="contain">Whole image, white bars inside the front's outline</option><option value="cover">Fill the front's outline, crop the edges</option></select></label>
-          <div class="size-note">Each front page is followed by a mirrored back page, so every back lands exactly behind its front. Give each piece a back by dropping an image on its <b>back</b> box (or on the back page in the preview). Pieces without a back print blank on the reverse. Ask for “double-sided, flip on the long edge”.</div>
-        </div>
-      </details>
-
-      <div class="summary" id="summary"></div>
+    <section class="panel ws-panel ws-sheet" aria-label="Sheet">
+      <div class="ws-title"><i>2</i><h2>Sheet</h2>
+        <div class="ws-seg" id="side-seg" hidden><button type="button" data-side="front">Fronts</button><button type="button" data-side="back">Backs</button></div>
+        <div class="ws-pager" id="pager" hidden><button class="btn small" id="prev" type="button" title="Previous" aria-label="Previous">‹</button><span id="pager-label"></span><button class="btn small" id="next" type="button" title="Next" aria-label="Next">›</button></div>
+      </div>
+      <div class="ws-view" id="view">
+        <div class="ws-stage" id="stage"><div id="preview"></div><div class="hint" id="preview-meta"></div></div>
+        <div class="ws-check" id="summary"></div>
+      </div>
       <div class="warnings" id="warnings" hidden></div>
-
-      <button class="btn primary" id="build" type="button">⬇ Build PDF</button>
       <div class="status" id="status"></div>
+      <div class="ws-on">
+        <div class="ws-on-head"><b>On this sheet</b><span class="hint" id="items-meta"></span><span class="spacer"></span>
+          <div class="all-back" id="all-back" hidden title="Drop a picture here to use it as the back of every piece">Drop here: same back for all</div>
+          <button class="btn small quiet" id="clear" type="button">Clear sheet</button>
+        </div>
+        <div class="ws-strip" id="items"></div>
+        <div class="ws-piece" id="piece" hidden></div>
+      </div>
       <div class="render" id="render" hidden></div>
     </section>
 
-    <section class="panel results">
-      <div class="gallery-head">
-        <div class="toolbar">
-          <h2 class="gallery-title">Preview</h2>
-          <span class="hint" id="preview-meta"></span>
-          <span class="spacer"></span>
-          <button class="btn small" id="clear" type="button">Clear sheet</button>
+    <section class="panel ws-panel ws-setup" aria-label="Setup">
+      <div class="ws-title"><i>3</i><h2>Setup</h2></div>
+      <div class="ws-scroll ws-groups">
+        <div class="ws-group">
+          <div class="ws-label">Paper</div>
+          <select id="page" aria-label="Paper size"></select>
+          <div class="grid2" id="custom-size" hidden>
+            <label class="field"><span>Width (in)</span><input id="custom-width" type="number" min="2" max="60" step="0.25" value="8.5"></label>
+            <label class="field"><span>Height (in)</span><input id="custom-height" type="number" min="2" max="60" step="0.25" value="11"></label>
+          </div>
+          <div class="size-note" id="page-note"></div>
+          <div class="ws-seg" data-for="orientation"><button type="button" data-v="portrait">Portrait</button><button type="button" data-v="landscape">Landscape</button></div>
+          <select id="orientation" hidden><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
         </div>
-      </div>
-      <div class="preview-pages" id="preview"></div>
 
-      <div class="gallery-head">
-        <div class="toolbar">
-          <h2 class="gallery-title">On the sheet</h2>
-          <span class="hint" id="items-meta"></span>
-          <span class="spacer"></span>
-          <div class="all-back" id="all-back" hidden title="Drop an image here to use it as the back of every piece">Drop an image here → same back for all</div>
+        <div class="ws-group">
+          <div class="ws-label">Per page</div>
+          <div class="ws-tiles" id="grid-tiles" data-for="grid"></div>
+          <select id="grid" hidden></select>
+          <div class="grid2" id="custom-grid" hidden>
+            <label class="field"><span>Columns</span><input id="cols" type="number" min="1" max="12" value="2"></label>
+            <label class="field"><span>Rows</span><input id="rows" type="number" min="1" max="12" value="2"></label>
+          </div>
+          <div class="size-note" id="grid-note"></div>
         </div>
-      </div>
-      <div class="sheet-items" id="items"></div>
 
-      <div class="gallery-head">
-        <div class="toolbar">
-          <h2 class="gallery-title">Pick images</h2>
-          <input id="search" type="search" placeholder="Filter by name or folder…">
-          <select id="source-filter"><option value="">All folders</option></select>
-          <button class="btn small" id="refresh" type="button" title="Rescan the folders">↻</button>
+        <div class="ws-group">
+          <div class="ws-label">Spacing</div>
+          <div class="ws-seg" id="spacing-seg"><button type="button" data-preset="laminate">Laminate</button><button type="button" data-preset="cut">Cut only</button><button type="button" data-preset="custom">Custom</button></div>
+          <div class="size-note" id="spacing-note"></div>
+          <div class="grid2">
+            <label class="field"><span>Margin (in)</span><input id="margin" type="number" min="0" max="3" step="0.125" value="0.25"></label>
+            <label class="field"><span>Gap (in)</span><input id="gutter" type="number" min="0" max="4" step="0.125" value="0.5"></label>
+          </div>
         </div>
-        <div class="hint" id="picker-hint"></div>
+
+        <div class="ws-group">
+          <div class="ws-label">Options</div>
+          <label class="ws-toggle"><span><b>Crop marks</b><small>In the gaps and at the page edges, on every cut line</small></span><input type="checkbox" id="cut-marks" checked></label>
+          <label class="ws-toggle"><span><b>Double-sided</b><small>A front and a back for each piece</small></span><input type="checkbox" id="duplex"></label>
+          <div class="ws-reveal" id="duplex-options" hidden>
+            <div class="field"><span>Printer flips the sheet on the</span>
+              <div class="ws-seg" data-for="flip"><button type="button" data-v="long">Long edge</button><button type="button" data-v="short">Short edge</button></div>
+              <select id="flip" hidden><option value="long">Long edge</option><option value="short">Short edge</option></select>
+            </div>
+            <label class="field"><span>A back with a different shape</span><select id="back-fit"><option value="contain">Whole image, white bars</option><option value="cover">Fill the front's outline, crop</option></select></label>
+            <div class="size-note" id="flip-note"></div>
+          </div>
+          <details class="ws-more" id="more">
+            <summary><span><b>More options</b><small id="more-note"></small></span></summary>
+            <label class="field"><span>Fit</span><select id="fit"><option value="contain">Whole image (no cropping)</option><option value="cover">Fill the cell (crop edges)</option></select></label>
+            <label class="field"><span>Image detail</span><select id="max-dpi"><option value="300">300 DPI (print quality)</option><option value="400" selected>400 DPI</option><option value="600">600 DPI (large file)</option><option value="1200">Full resolution</option></select></label>
+            <label class="field"><span>File size</span><select id="encode"><option value="jpeg" selected>Smaller file: JPEG at quality 92</option><option value="png">Lossless PNG: about 10× larger</option></select></label>
+            <label class="ws-toggle"><span><b>Pack edge to edge</b><small>Cells take the pieces' shape; with a 0 gap every cut line is shared</small></span><input type="checkbox" id="pack"></label>
+            <label class="ws-toggle"><span><b>Hairline border</b><small>Around each picture; prints on the piece</small></span><input type="checkbox" id="outline"></label>
+            <label class="ws-toggle"><span><b>Sheet name label</b><small>Printed in the bottom margin</small></span><input type="checkbox" id="label"></label>
+          </details>
+        </div>
       </div>
-      <div id="picker"></div>
     </section>
   </main>
 

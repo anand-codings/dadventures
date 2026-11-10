@@ -1,0 +1,158 @@
+/* Print Sheets — one workspace in work order: 1 Pictures, 2 Sheet, 3 Setup. Loaded after styles.css and before theme.css;
+   every rule is scoped to the page, so it works with or without the Dadventures skin. */
+body.sheets { --gutter: var(--s6, 32px); --ws-ink: var(--text); --ws-paper: var(--panel); }
+body.sheets .layout.ws { display: grid; grid-template-columns: 288px minmax(0, 1fr) 312px; gap: 16px; align-items: start; padding-top: 16px; padding-bottom: 24px; max-width: none; }
+
+/* --- the bar: sheet name, save state, Sheets menu, what Build PDF will make (lifted into the page header by shell.js) --- */
+.ws-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ws-name { display: block; flex: 1; min-width: 200px; }
+.ws-bar .ws-name input { font-size: 20px; font-weight: 700; }
+.ws-bar-actions { display: flex; align-items: center; gap: 8px; }
+.ws-chip { font: 11px/1.4 var(--f-label, inherit); text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.ws-chip.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.dv-head .ws-chip { background: var(--navy-2); color: var(--navy-muted); }
+.dv-head .ws-chip.ok { background: color-mix(in srgb, #62a858 26%, transparent); color: #9fd596; }
+.ws-build-meta { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.35; padding-left: 12px; margin-left: 4px; border-left: 1px solid var(--border); white-space: nowrap; }
+.ws-build-meta b { font-size: 13px; }
+.ws-build-meta small { font: 11px/1.4 var(--f-label, inherit); color: var(--muted); }
+.dv-head .ws-build-meta { border-color: var(--navy-line); }
+.dv-head .ws-build-meta small { color: var(--navy-muted); }
+.ws-menu { position: relative; }
+.ws-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 300px; max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0, 0, 0, .3); }
+.ws-pop button { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 10px; font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
+.ws-pop button:hover:not(:disabled), .ws-pop button:focus-visible { background: var(--panel-2); outline: none; }
+.ws-pop button:disabled { opacity: .45; cursor: default; }
+.ws-pop button.on { box-shadow: inset 3px 0 0 var(--accent); }
+.ws-pop button.danger { color: var(--danger); border-top: 1px solid var(--border); border-radius: 0 0 6px 6px; margin-top: 4px; }
+.ws-pop button b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-pop button small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.ws-pop-label { font: 11px/1.4 var(--f-label, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 8px 10px 2px; margin-top: 4px; border-top: 1px solid var(--border); }
+.ws-pop .hint { padding: 6px 10px; }
+
+/* --- panels --- */
+body.sheets .ws .ws-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px; }
+.ws-title { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.ws-title i { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ws-ink); color: var(--ws-paper); font: 11px/1 var(--f-label, inherit); font-style: normal; }
+.ws-title h2 { flex: 1; margin: 0; font: 700 22px/1.1 var(--f-title, inherit); }
+.ws-scroll { overflow: auto; min-height: 0; scrollbar-width: thin; }
+.ws-label, .ws-pg > span { font: 11px/1.4 var(--f-label, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ws-seg { display: flex; gap: 2px; padding: 3px; background: var(--panel-2); border-radius: 6px; }
+.ws-seg button { flex: 1; border: 0; background: none; padding: 6px 10px; border-radius: 4px; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.ws-seg button:hover { color: var(--text); }
+.ws-seg button.on, .ws-chips button.on, .ws-tiles button.on { background: var(--ws-ink); color: var(--ws-paper); border-color: var(--ws-ink); }
+.ws button:focus-visible, .ws-toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- 1 Pictures --- */
+.ws-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-chips button { border: 1px solid transparent; background: var(--panel-2); color: var(--muted); font: 11.5px/1.4 var(--f-label, inherit); padding: 4px 9px; border-radius: 4px; cursor: pointer; }
+.ws-pictures #picker { max-height: 420px; }
+.ws-pictures .picker-group .section-title { margin: 0 0 8px; flex-wrap: wrap; gap: 2px 8px; }
+.ws-pictures .picker-group .hint { overflow-wrap: anywhere; }
+.ws-pictures .gallery { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 8px; }
+.ws-pictures .thumb.pick { aspect-ratio: 2 / 3; }
+.ws-pictures .thumb .cap { display: none; font-size: 10px; padding: 3px 4px; }
+.ws-pictures .thumb:hover .cap { display: block; }
+.ws-pictures .thumb .badge.pickcount { top: 4px; right: 4px; background: var(--ws-ink); color: var(--ws-paper); font-size: 11px; }
+.ws-drop { display: flex; flex-direction: column; gap: 2px; align-items: center; text-align: center; border: 1px dashed var(--muted); border-radius: 6px; padding: 12px; font-size: 12px; color: var(--muted); }
+.ws-drop b { font-size: 13px; color: var(--text-2, var(--text)); }
+
+/* --- 2 Sheet --- */
+.ws-title .ws-seg { flex: none; }
+.ws-pager { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.ws-pager .btn { min-width: 32px; font-size: 16px; }
+.ws-view { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.ws-view.tall { flex-direction: row; }
+.ws-view.tall .ws-stage { flex: 1; min-width: 0; }
+.ws-view.tall .ws-check { flex: none; width: 148px; box-sizing: border-box; grid-template-columns: minmax(0, 1fr); align-content: start; padding: 14px 16px; }
+.ws-stage { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--bg); border-radius: 6px; }
+.ws-stage > #preview { height: 480px; min-height: 0; display: grid; place-items: center; overflow: hidden; }
+.ws-stage > .hint { text-align: center; }
+.ws-stage .page-preview { display: block; margin: 0; }
+.ws-stage .canvas { display: block; background: #fff; outline: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0, 0, 0, .16); }
+.ws-stage .page-preview svg { display: block; width: 100%; height: 100%; max-width: none; border: 0; border-radius: 0; box-shadow: none; }
+.ws-blank { padding: 3%; box-sizing: border-box; }
+.ws-blank > div { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; border: 1px dashed #8d949a; border-radius: 4px; color: #5c6770; font-size: 12px; line-height: 1.45; }
+.ws-blank b { font: 600 19px/1.2 var(--f-title, inherit); color: #2e3b47; }
+.ws-blank span { max-width: 34ch; }
+.ws-check { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 10px 16px; background: var(--bg); border-radius: 6px; }
+.ws-check div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ws-check span { font: 11px/1.4 var(--f-label, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ws-check b { font: 600 19px/1.2 var(--f-title, inherit); }
+.ws-check b.ok::after { content: ' ✓'; color: var(--ok); }
+.ws-check b.low { color: var(--danger); }
+.ws .warnings { color: var(--text); }
+.ws-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--accent-text, var(--accent)); text-decoration: underline; cursor: pointer; }
+.ws-sheet .status:empty { display: none; }
+.ws .render-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; justify-content: flex-start; }
+.ws .render-head .spacer { flex: 1; }
+.ws-on { display: flex; flex-direction: column; gap: 8px; }
+.ws-on-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-height: 32px; }
+.ws-on-head .spacer { flex: 1; }
+.ws-strip { display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; padding: 5px 5px 2px 2px; scrollbar-width: thin; }
+.ws-pg { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.ws-pg > span { white-space: nowrap; }
+.ws-pg > div { display: flex; gap: 6px; }
+.ws-strip .sheet-item { position: relative; flex: none; display: flex; flex-direction: column; gap: 4px; width: 44px; padding: 0; border: 0; background: none; cursor: grab; }
+.ws-strip .sheet-item > img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--panel-2); box-sizing: border-box; }
+.ws-strip .sheet-item.sel > img { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ws-strip .sheet-item .n { position: absolute; top: 3px; left: 3px; padding: 0 4px; border-radius: 999px; background: var(--ws-ink); color: var(--ws-paper); font: 10px/1.5 var(--f-label, inherit); }
+.ws-strip .sheet-item > button { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: var(--ws-ink); color: var(--ws-paper); font-size: 10px; line-height: 18px; cursor: pointer; opacity: 0; }
+.ws-strip .sheet-item:hover > button, .ws-strip .sheet-item > button:focus-visible { opacity: 1; }
+.ws-strip .back-zone { width: 44px; height: 30px; font-size: 9px; box-sizing: border-box; }
+.ws-strip .drop-end { align-self: stretch; min-width: 96px; place-items: center; }
+.ws-strip-empty { flex: 1; border: 1px dashed var(--muted); border-radius: 6px; padding: 18px 12px; text-align: center; font-size: 12px; color: var(--muted); }
+.ws-piece { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; background: var(--bg); border-radius: 6px; }
+.ws-piece .sheet-item-meta { flex: 1; min-width: 140px; }
+.ws-piece .copies { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.ws-piece .copies input { width: 64px; padding-top: 5px; padding-bottom: 5px; }
+
+/* --- 3 Setup --- */
+.ws-groups { display: flex; flex-direction: column; gap: 14px; padding-right: 2px; }
+.ws-group { display: flex; flex-direction: column; gap: 8px; }
+.ws-group + .ws-group { border-top: 1px solid var(--border); padding-top: 14px; }
+.ws-group .size-note:empty { display: none; }
+.ws-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ws-tiles button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ws-tiles button:hover { border-color: var(--accent); }
+.ws-tiles svg { flex: none; width: 14px; height: 18px; fill: var(--muted); }
+.ws-tiles button.on svg { fill: var(--ws-paper); }
+.ws-toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.ws-toggle > span { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ws-toggle b, .ws-more summary b { font-size: 13.5px; }
+.ws-toggle small, .ws-more summary small { font: 11.5px/1.4 var(--f-label, inherit); color: var(--muted); }
+.ws-toggle input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 36px; height: 20px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); cursor: pointer; transition: background .12s, border-color .12s; }
+.ws-toggle input[type=checkbox]::after { content: ''; position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .12s; }
+.ws-toggle input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+.ws-toggle input[type=checkbox]:checked::after { transform: translateX(16px); }
+.ws-reveal { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg); border-radius: 6px; }
+.ws-more { border: 1px solid var(--border); border-radius: 6px; padding: 0 12px; }
+.ws-more[open] { padding-bottom: 12px; }
+.ws-more summary { display: flex; align-items: center; gap: 8px; padding: 9px 0; cursor: pointer; list-style: none; }
+.ws-more summary::-webkit-details-marker { display: none; }
+.ws-more summary > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ws-more summary::after { content: '›'; font-size: 20px; line-height: 1; color: var(--muted); transition: transform .12s; }
+.ws-more[open] summary::after { transform: rotate(90deg); }
+.ws-more > :not(summary) { margin-top: 10px; }
+
+/* --- fit the screen: on a roomy window the three panels fill the viewport and scroll on their own --- */
+@media (min-width: 1360px) and (min-height: 700px) {
+  html.dv-on body.sheets .dv-main { height: 100vh; display: flex; flex-direction: column; }
+  html.dv-on body.sheets .layout.ws { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+  html.dv-on body.sheets .ws-panel { min-height: 0; }
+  html.dv-on .ws-pictures #picker, html.dv-on .ws-groups { flex: 1; max-height: none; }
+  html.dv-on .ws-sheet { overflow: auto; scrollbar-width: thin; }
+  html.dv-on .ws-view { flex: 1 0 clamp(320px, 48vh, 520px); }
+  html.dv-on .ws-view:not(.tall) .ws-stage { flex: 1; min-height: 0; }
+  html.dv-on .ws-stage > #preview { flex: 1; height: auto; }
+}
+@media (max-width: 1359px) {
+  body.sheets .layout.ws { grid-template-columns: minmax(0, 1fr) 312px; }
+  .ws-pictures { grid-column: 1 / -1; }
+  .ws-pictures #picker { max-height: 250px; }
+}
+@media (max-width: 900px) {
+  body.sheets .layout.ws { grid-template-columns: minmax(0, 1fr); }
+  .ws-stage > #preview { height: 380px; }
+  .ws-view.tall { flex-direction: column; }
+  .ws-view.tall .ws-check { width: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 16px; }
+}
