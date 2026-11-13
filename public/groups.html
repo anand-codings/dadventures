@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Groups — Dadventures</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%237c5cff%27/%3E%3Ccircle cx=%2722%27 cy=%2726%27 r=%278%27 fill=%27%23fff%27/%3E%3Ccircle cx=%2742%27 cy=%2726%27 r=%278%27 fill=%27%23fff%27/%3E%3Cpath d=%27M6 54c1-10 7-15 16-15s15 5 16 15zM26 54c1-10 7-15 16-15s15 5 16 15z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/groups.css">
+  <script src="/shell.js" defer></script>
+</head>
+<body class="crews">
+  <header class="topbar">
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a class="on" href="/groups.html">Groups</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <div class="topbar-meta" id="topbar-meta"></div>
+  </header>
+
+  <main class="chars-page groups-page">
+    <!-- Every group, plus crews the studio suggests from who has shared a story -->
+    <section id="list-view">
+      <div class="toolbar">
+        <h2 class="gallery-title">Groups <span class="hint">· crews who share a universe of stories; their relationships and running storylines go to the writer</span></h2>
+        <span class="spacer"></span>
+        <button class="btn primary small" id="group-new" type="button">+ New group</button>
+      </div>
+      <div class="groups" id="groups"></div>
+      <div class="hint groups-empty" id="groups-empty" hidden>No groups yet. Make one for characters who belong together: a family, a gang of friends, a classroom.</div>
+    </section>
+
+    <!-- One group -->
+    <section id="group-view" hidden>
+      <button class="link" id="back" type="button">‹ All groups</button>
+      <form class="panel group-form" onsubmit="return false">
+        <label class="field"><span>Name</span><input id="group-name" type="text" maxlength="80" placeholder="e.g. The Reef Crew"></label>
+        <div class="field"><span>Who is in it</span><div class="char-chips" id="group-members"></div></div>
+        <label class="field"><span>What the group is about <span class="hint">(their world, what keeps them together)</span></span><textarea id="group-about" rows="2" maxlength="1000" placeholder="Four friends who live around Coral Cove and look after each other at bedtime."></textarea></label>
+        <label class="field"><span>How they relate to each other</span><textarea id="group-relationships" rows="4" maxlength="2000" placeholder="Ollie is the brave one; Crab is his grumpy best friend who secretly worries about him; Fish is Crab’s little sister and copies everything Ollie does."></textarea></label>
+        <label class="field"><span>Running storylines <span class="hint">— threads the writer weaves a little further in each new story</span></span><textarea id="group-arcs" rows="4" maxlength="2000" placeholder="Ollie is slowly getting less scared of the dark. Baby Seahorse is looking for her family. Crab keeps losing his shell-shaped hat."></textarea></label>
+        <div class="group-actions">
+          <button class="btn secondary small" id="group-delete" type="button">Delete group</button>
+          <span class="status" id="group-status"></span>
+          <span class="spacer"></span>
+          <button class="btn secondary small" id="group-cancel" type="button">Cancel</button>
+          <button class="btn primary small" id="group-save" type="button">Save group</button>
+        </div>
+      </form>
+      <div class="panel">
+        <h3 class="section-title">Their stories together, in order</h3>
+        <div id="group-timeline"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/url-state.js"></script>
+  <script src="/groups.js"></script>
+</body>
+</html>

@@ -22,3 +22,15 @@ face close-up, reference sheet, or style-only. The first image is the primary an
 
 ---
 [← All guides](README.md) · [Project README](../README.md)
+
+## Groups: crews who share stories
+
+Groups have their own page, **Groups** in the sidebar under The Crew (`/groups.html`; the Characters page links to it with **👥 Groups**). Each group opens as its own page with its own link (`/groups.html?group=<id>`). A group is a crew of characters who belong together (a family, a reef gang, a classroom), and it builds up a shared universe of stories:
+
+- **Who is in it**, **what the group is about**, **how they relate to each other** and **running storylines**: threads that carry across stories (Ollie is slowly getting less scared of the dark; Baby Seahorse is looking for her family).
+- **Their stories together, in order**: every Flash Cards story and Story Book with at least two members in it, oldest first, linked to the story.
+- **Suggested groups**: characters who have already been in stories together but are not grouped yet. Click one to make it a group.
+
+When a new story (Flash Cards or Story Books) has at least two members of a group, the writer receives the group's notes, its running storylines and the titles and loglines of its earlier stories. It is asked to add a new chapter that keeps relationships consistent and moves a storyline forward, rather than retelling an earlier plot. In Flash Cards, the 👥 group chip in the character picker selects the whole crew in one click.
+
+Groups are stored in `output/characters/groups.json`. The story timeline is not stored; it is worked out each time from the series and books on disk.

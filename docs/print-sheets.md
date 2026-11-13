@@ -18,6 +18,7 @@ The sheet's name is the page title (click it to rename), and **Build PDF** sits 
     2×2, 2×3, 3×2… or a custom grid.
   - **Spacing**: *Laminate* sets a ¼ in margin and a ½ in gap, so every piece keeps a sealed border after cutting.
     *Cut only* sets a gap of 0 and a ⅜ in margin, so each cut line is shared and the crop marks at the page edges print.
+    *Edge to edge* sets both to 0, so the pieces fill the whole sheet (print borderless, or ask the shop for full bleed).
     Typing your own **margin** or **gap** switches to *Custom*.
   - **Options**: **crop marks** in the gaps and at the page edges on every cut line, and **double-sided**.
   - **Defaults are set for the best print**: double-sided on, whole image (no cropping), full resolution and lossless PNG.

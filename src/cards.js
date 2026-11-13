@@ -40,6 +40,14 @@ const TODDLER_RULES = `TODDLER STORY (ages 1–3) — these rules override anyth
 - Feelings are named plainly: happy, sad, cross, scared, sleepy, proud.
 - The line for grown-ups is a tip for sharing this card with a toddler ("Pause and let your child say 'uh-oh'"), not a science fact.`;
 const MAX_CARDS = 40;
+// A story series is also a Story Book, so its card count comes in fours: the book then prints double-sided with no blank
+// backs. Topic sets (flash cards) can be any size.
+const STORY_STEP = 4;
+// A new story is drawn at a quarter of a Letter sheet (4.25 × 5.5 in, 17:22), so four cards fill an 8.5 × 11 sheet with no
+// margin and no gap. A series keeps whatever size it was started with.
+const STORY_SIZE = '1088x1408';
+const sizeDims = (size) => { const m = /^(\d+)x(\d+)$/.exec(size || ''); return m ? { w: Number(m[1]), h: Number(m[2]) } : { w: 1024, h: 1536 }; };
+const isQuarterLetter = (size) => { const { w, h } = sizeDims(size); return Math.abs(Math.min(w, h) / Math.max(w, h) - 17 / 22) < 0.01; };
 const MAX_SLOTS = 16;
 const WRITE_CHUNK = 5;
 const REF_EDGE = 1536;
@@ -325,6 +333,7 @@ export const PLAY_TYPES = ['find', 'count', 'move', 'sound', 'guess'];
 export function createCards(deps) {
   const { OUTPUT_DIR, CARD_MODEL, CARD_VISION_MODEL, API_KEY, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
     readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, handleCharacterSheet, identityLine, validateSize, IMAGE_MODELS, QUALITIES, listImages, resolveImage } = deps;
+  const { storyLine = () => '', writerLine = identityLine, groupText = () => '' } = deps;
   const CARDS_DIR = path.join(OUTPUT_DIR, 'cards');
   const LIB_DIR = path.join(CARDS_DIR, 'library');
   const TPL_DIR = path.join(CARDS_DIR, 'templates');
@@ -613,8 +622,22 @@ export function createCards(deps) {
     const first = s.cards.find((c) => c.imageId);
     const printed = (c) => c.slots.filter((x) => x.heading || x.text).map((x) => [x.heading, x.text].filter(Boolean).join(' ')).join(' ');
     const f = s.foundation || {};
-    const page = (c) => ({ id: c.id, kind: 'page', n: c.n, chapter: c.chapter || '', arc: c.arc || '', purpose: c.purpose || '', setting: c.setting || '', emotion: c.feeling || '', continuity: c.state || '', beat: c.beat || c.topic, text: c.narration || printed(c), illustration: `${c.title}${c.setting ? ` — ${c.setting}` : ''}`,
-      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [] });
+    // Pictures drawn for the book itself on the Story Books page (and their prompts) stay while the card has none of its own.
+    const drawn = (id, own) => { const o = !own && prev?.pages?.find((x) => x.id === id); return o?.imageId ? { imageId: o.imageId, imageIds: o.imageIds || [o.imageId], imagePrompt: o.imagePrompt || '', promptAuto: o.promptAuto || '', check: o.check || null } : {}; };
+    // The card's own layout as the page's design (panels with caption, speech and picture; play box; fact; grown-ups line),
+    // unless the page was designed in Story Books, which then stays.
+    const PANEL_LAYOUT = { 1: 'picture', 2: 'duo', 3: 'trio', 4: 'quad' };
+    const slot = (c, key) => c.slots.find((x) => x.key === key);
+    const cardDesign = (c) => {
+      const panels = c.slots.filter((x) => /^panel-\d+$/.test(x.key)).slice(0, 4).map((x) => ({ caption: x.heading || '', speech: x.text || '', visual: x.visual || '' }));
+      if (!panels.length) return null;
+      return { layout: c.layout === 'splash' ? 'picture' : ['duo', 'trio', 'quad'].includes(c.layout) ? c.layout : PANEL_LAYOUT[panels.length], by: 'card', panels,
+        play: { type: c.play && slot(c, 'play')?.text ? c.play : '', prompt: c.play ? slot(c, 'play')?.text || '' : '' },
+        fact: slot(c, 'did-you-know')?.text || '', grownups: (slot(c, 'grown-ups')?.text || '').replace(/^for grown-?ups:\s*/i, '') };
+    };
+    const designOf = (c) => { const o = prev?.pages?.find((x) => x.id === c.id)?.design; return o && o.by !== 'card' ? o : cardDesign(c); };
+    const page = (c) => ({ id: c.id, kind: 'page', n: c.n, chapter: c.chapter || '', arc: c.arc || '', purpose: c.purpose || '', setting: c.setting || '', place: c.place || '', emotion: c.feeling || '', continuity: c.state || '', beat: c.beat || c.topic, text: c.narration || printed(c), illustration: `${c.title}${c.setting ? ` — ${c.setting}` : ''}`,
+      characters: c.characters, textPlacement: 'bottom', imageId: c.imageId, imageIds: c.imageIds || [], design: designOf(c), ...drawn(c.id, c.imageId) });
     const book = {
       id: s.id, fromSeries: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, stage: s.cards.every((c) => c.title) ? 'scripted' : 'outlined',
       brief: { premise: s.brief.premise, audience: { '1-3': '0-3', '3-5': '3-5', '5-8': '5-8', '8-12': '6-9' }[s.brief.audience] || '3-5', pageCount: s.cards.length, tone: s.brief.tone,
@@ -622,9 +645,11 @@ export function createCards(deps) {
       chapterArt: s.chapterCards || {},
       title: s.title, logline: s.logline, theme: f.lesson || s.refrain || '', styleGuide: s.styleGuide || '', cast: s.cast, world: s.world || '',
       storyline: { want: f.want || '', obstacle: [f.challenge, f.failedTry && `First try: ${f.failedTry}`].filter(Boolean).join(' ') || '', turningPoint: f.turningChoice || '', resolution: s.cards.find((c) => c.arc === 'resolution')?.beat || '', change: f.change || '' },
-      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [] },
+      pages: [{ id: `${s.id.slice(0, 28)}c0ve0000`, kind: 'cover', n: 0, titlePage: !s.cover?.imageId, beat: '', text: '', illustration: s.logline, characters: s.cast.slice(0, 3).map((c) => c.name), textPlacement: 'top', imageId: s.cover?.imageId || first?.imageId || null, imageIds: s.cover?.imageId ? [s.cover.imageId] : first ? [first.imageId] : [], ...drawn(`${s.id.slice(0, 28)}c0ve0000`, s.cover?.imageId || first?.imageId) },
         ...s.cards.map(page)],
-      image: { model: s.image.model, quality: s.image.quality, size: s.image.size, textInImage: true },
+      worldSheetId: prev?.worldSheetId || null, anchorPageId: prev?.anchorPageId || null,
+      // Settings changed on the Story Books page (page style, proofreading, references) are kept.
+      image: { ...(prev?.image || {}), model: s.image.model, quality: s.image.quality, size: s.image.size, textInImage: true },
     };
     await fsp.mkdir(BOOKS_DIR, { recursive: true });
     await writeJsonAtomic(file, book);
@@ -655,7 +680,11 @@ export function createCards(deps) {
       templateId: tid('templateId'), styleTemplateId: tid('styleTemplateId'),
       premise: pick('premise', 4000), topics: pick('topics', 4000), lesson: pick('lesson', 300),
       audience: CARD_AUDIENCES.some((a) => a.id === (v.audience ?? prev.audience)) ? (v.audience ?? prev.audience) : 'template',
-      cardCount: Math.min(MAX_CARDS, Math.max(1, Math.floor(Number(v.cardCount ?? prev.cardCount) || 6))),
+      cardCount: (() => {
+        const n = Math.min(MAX_CARDS, Math.max(1, Math.floor(Number(v.cardCount ?? prev.cardCount) || 6)));
+        // A story becomes a book whose cover backs card 1, so cover + cards come in fours (3, 7, 11, 15 … cards).
+        return (v.kind ?? prev.kind) === 'story' ? Math.min(Math.floor((MAX_CARDS + 1) / STORY_STEP) * STORY_STEP - 1, Math.max(STORY_STEP - 1, Math.ceil((n + 1) / STORY_STEP) * STORY_STEP - 1)) : n;
+      })(),
       tone: pick('tone', 300), notes: pick('notes', 4000),
       characterIds: Array.isArray(v.characterIds) ? v.characterIds.map(String).slice(0, 8) : prev.characterIds || [],
       // Another story series whose world, places, cast and look this one continues.
@@ -744,7 +773,8 @@ export function createCards(deps) {
       `Number of cards: ${b.cardCount}`,
       b.tone && `Tone: ${b.tone}`, b.notes && `Other notes: ${b.notes}`,
       b.kind === 'story' && a.id === '1-3' && TODDLER_RULES,
-      chars.length && `Existing characters to use (keep these exact names; their look is fixed by reference images):\n${chars.map((c) => `- ${c.name}: ${identityLine(c)}`).join('\n')}`,
+      chars.length && `Existing characters to use (keep these exact names; their look is fixed by reference images; keep their personality, likes, worries and way of talking):\n${chars.map((c) => `- ${c.name}: ${writerLine(c)}`).join('\n')}`,
+      chars.length && groupText(chars, s.id),
     ].filter(Boolean).join('\n');
   }
 
@@ -931,7 +961,7 @@ export function createCards(deps) {
       const chunk = wanted.slice(i, i + WRITE_CHUNK);
       const extras = (c) => [c.chapter && `chapter: ${c.chapter}`, c.place && `place: ${c.place}`, c.arc && `stage: ${c.arc}`, c.feeling && `feeling: ${c.feeling}`, c.purpose && `purpose: ${c.purpose}`, variantOf(layout, c) && `layout "${variantOf(layout, c).id}"`, c.setting && `setting: ${c.setting}`, c.play && `play type: ${c.play}`, c.state && `state at the end of this card: ${c.state}`].filter(Boolean).join('; ');
       const outline = s.cards.map((c) => `Card ${c.n}: ${c.topic}${c.beat ? ` — ${c.beat}` : ''}${extras(c) ? `\n  [${extras(c)}]` : ''}${c.title ? `\n  Written so far: "${c.title}"${c.slots.length ? ` · ${c.slots.map((x) => [x.heading, x.text].filter(Boolean).join(': ')).join(' / ').slice(0, 500)}` : ''}${c.closing ? ` · ends: "${c.closing}"` : ''}${c.narration ? `\n  Narration so far: ${c.narration}` : ''}` : ''}`).join('\n');
-      const input = [seriesText(s, chars), s.cast.length && `Cast:\n${s.cast.map((c) => `- ${c.name} (${c.role}): ${c.description}`).join('\n')}`, templateText(layout), `Series outline:\n${outline}`,
+      const input = [seriesText(s, chars), s.cast.length && `Cast:\n${s.cast.map((c) => { const l = c.characterId && all.find((x) => x.id === c.characterId); const t = l && storyLine(l); return `- ${c.name} (${c.role}): ${c.description}${t ? ` Personality notes (keep them in character): ${t}` : ''}`; }).join('\n')}`, templateText(layout), `Series outline:\n${outline}`,
         `Write cards: ${chunk.map((c) => c.n).join(', ')}`, extra && `Revision instructions: ${extra}`].filter(Boolean).join('\n\n');
       const base = written;
       const { parsed, durationMs, usage } = await llmJson({ name: 'card_series_cards', model: CARD_MODEL, instructions: WRITE_INSTRUCTIONS, schema: cardsSchema, log: { type: 'card_series_write', seriesId: id, cards: chunk.map((c) => c.n) }, input }, (t) => {
@@ -1030,10 +1060,12 @@ export function createCards(deps) {
       ? 'Continuity: this card continues a story. Recurring characters keep exactly the same design, proportions and body colours on every card, even when the surroundings change colour.'
       : 'Continuity: this card continues a story. Keep recurring characters, their sizes and colors, the setting and the time of day consistent with the other cards.');
     lines.push('', 'Constraints:',
-      '- Every word must be spelled exactly as given, sharp and easy to read when the card is printed 5 × 7.5 inches: large rounded lettering with strong contrast against its background.',
+      `- Every word must be spelled exactly as given, sharp and easy to read when the card is printed ${isQuarterLetter(s.image.size) ? '4.25 × 5.5' : '5 × 7.5'} inches: large rounded lettering with strong contrast against its background.`,
       '- A slash with spaces around it ( / ) inside quoted text marks a line break: start a new line there and do not print the slash.',
       '- No text other than the items listed above: no extra labels, no filler words, no logos, no watermark, no signature.',
-      '- Keep all text and panel edges inside a safe margin of about 4% from every edge (the card will be cut and laminated); the background art runs to the edge.',
+      isQuarterLetter(s.image.size)
+        ? '- Keep all text, faces and panel edges inside a safe margin of about 6% from every edge: the card is printed edge to edge and cut with no border, so anything closer may be trimmed. The background art runs right to the edge, with no border or frame around the card.'
+        : '- Keep all text and panel edges inside a safe margin of about 4% from every edge (the card will be cut and laminated); the background art runs to the edge.',
       '- Each panel shows its own picture; do not repeat the same picture in two panels.');
     if (tracked || facts.length) lines.push('- Draw in each panel only the named characters listed for it. A character the story facts place inside, under or behind something is drawn there and nowhere else on the card: not in another panel, not in the play box, not as a decoration.');
     if (opts.fixNotes) lines.push('', `A previous attempt at this card had these mistakes — make sure this one does not:\n${opts.fixNotes}`);
@@ -1291,15 +1323,15 @@ Report only what a parent reading the cards in a row, or a sharp-eyed child, wou
   // ---------- card backs: a typeset reverse side for double-sided printing ----------
   // The back carries what the reader needs while the child looks at the picture: the card's number and chapter, the
   // read-aloud text, the play prompt and the note for grown-ups. Typeset as HTML and photographed with headless Chrome
-  // (2048 × 3072, the same 2:3 shape as the fronts), so every word is exact. Files: output/cards/backs/<series>/.
+  // (at twice the size below: 2176 × 2816 for quarter-Letter cards, else 2048 × 3072, the same shape as the fronts), so every word is exact. Files: output/cards/backs/<series>/.
   const CHROME = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const BACKS_DIR = path.join(CARDS_DIR, 'backs');
   const BACK_HUES = [205, 28, 150, 265, 345, 48, 180, 300];
   const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  function backHtml({ hue, band, kicker, title, label, body, boxes = [], foot = [] }) {
+  function backHtml({ hue, band, kicker, title, label, body, boxes = [], foot = [], W = 1024, H = 1536 }) {
     return `<!doctype html><html><head><meta charset="utf-8"><style>
 *{box-sizing:border-box;margin:0}
-html,body{width:1024px;height:1536px}
+html,body{width:${W}px;height:${H}px}
 body{background:hsl(${hue} 60% 96%);color:#22303c;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;padding:64px;display:flex;flex-direction:column;gap:26px;overflow:hidden}
 .band{display:flex;justify-content:space-between;align-items:center;background:hsl(${hue} 55% 42%);color:#fff;border-radius:22px;padding:16px 26px;font:600 27px "Arial Rounded MT Bold","Avenir Next",sans-serif}
 .kicker{font:600 26px "Avenir Next",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:hsl(${hue} 50% 38%)}
@@ -1344,12 +1376,14 @@ ${foot.length ? `<div class="foot">${foot.map(([k, v]) => (k === 'i' ? `<i>${esc
     await fsp.mkdir(dir, { recursive: true });
     const old = s.backs || {}, next = {};
     let made = 0;
+    // The back has the shape of its front, so the two sides are cut along the same lines.
+    const [W, H] = isQuarterLetter(s.image.size) ? [1088, 1408] : [1024, 1536];
     for (const b of backsFor(s)) {
-      const html = backHtml(b.spec), hash = sha(html), prev = old[b.key];
+      const html = backHtml({ ...b.spec, W, H }), hash = sha(html), prev = old[b.key];
       if (prev && prev.hash === hash && !body.redo && await exists(path.join(OUTPUT_DIR, prev.rel))) { next[b.key] = prev; continue; }
       const file = `${b.name}-${hash.slice(0, 6)}.png`, src = path.join(dir, `${b.name}.html`);
       await fsp.writeFile(src, html);
-      const ok = await new Promise((resolve) => execFile(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2', '--window-size=1024,1536', '--virtual-time-budget=3000', `--screenshot=${path.join(dir, file)}`, `file://${src}`], { timeout: 60000 }, (err) => resolve(!err)));
+      const ok = await new Promise((resolve) => execFile(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2', `--window-size=${W},${H}`, '--virtual-time-budget=3000', `--screenshot=${path.join(dir, file)}`, `file://${src}`], { timeout: 60000 }, (err) => resolve(!err)));
       await fsp.rm(src, { force: true });
       if (!ok || !(await exists(path.join(dir, file)))) throw new HttpError(500, `Chrome could not typeset the back of ${b.name}.`);
       next[b.key] = { rel: path.relative(OUTPUT_DIR, path.join(dir, file)), hash, at: new Date().toISOString() };
@@ -1580,6 +1614,7 @@ Leave text that already follows the rules exactly as it is.`,
       ctx.storyTitle ? `Story: "${ctx.storyTitle}"${ctx.logline ? ` — ${ctx.logline}` : ''}` : 'There is no story yet: write the profile from the design alone, giving the character a small, consistent, child-friendly personality and world.',
       ctx.spine && `Story spine: ${ctx.spine}`,
       `Character: ${name}${ctx.role ? ` (${ctx.role})` : ''}`, `Design: ${identityLine(character) || 'as shown in the reference images'}`,
+      storyLine(character) && `Who they are, from the author (build the profile — wants and worries, habits, quote, facts — on these, do not contradict them): ${storyLine(character)}`,
       ctx.others && `Other cast (for size comparisons): ${ctx.others}`,
       ctx.appearances && `In the story:\n${ctx.appearances}`,
       clampStr(body.notes, 2000) && `Notes from the author: ${clampStr(body.notes, 2000)}`,
@@ -1617,6 +1652,97 @@ Leave text that already follows the rules exactly as it is.`,
     await appendLog({ type: 'character_bible', name, characterId, recordId: rec.id, story: ctx.storyTitle || null, usage, durationMs, costUsd: rec.costUsd });
     return { record: rec, profile: p };
   }
+  // A brand-new character from words alone (an animal, a creature, anyone made up). Same studio practice as the cast sheet:
+  // 1. turn the brief into fixed design fields, 2. one approved "master" drawing from them, 3. the clean turnaround sheet
+  // built from the master (the reference sent with every later picture), 4. the detailed character bible. If a later step
+  // fails, the character and whatever was already drawn are kept and the error is returned alongside.
+  const DESIGN_INSTRUCTIONS = `You are the character designer for a children's picture-book studio. Turn the author's brief into one fixed, drawable character design that an illustrator can repeat identically on every page. Keep everything the author specified; invent only what is missing, choosing details that are simple, distinctive, child-friendly and easy to keep consistent (a few clear shapes, 3–5 colours, one or two signature features). Never describe a scene, a pose or other characters. If the brief names an existing copyrighted character, design an original character inspired by the idea instead of copying it.`;
+  const DESIGN_SCHEMA = obj({
+    description: str('appearance only: species or kind, body shape and proportions, size, face, eyes, fur/skin/scales, markings and signature features; 2–4 sentences, under 900 characters'),
+    outfit: str('clothing and accessories always worn, or "none"; under 250 characters'),
+    palette: str('3–6 named colours and where each appears, comma separated; under 250 characters'),
+    style: str('rendering style, e.g. "soft watercolour picture-book illustration with gentle ink outlines"; use the author\'s style if given; under 250 characters'),
+    personality: str('3–5 traits, comma separated; under 250 characters'),
+  });
+  // The author's story notes for a new character (all optional): personality plus what carries them through stories.
+  const STORY_NOTES = [['personality', 'Personality', 300], ['loves', 'Loves', 300], ['worries', 'Worries', 300], ['voice', 'How they talk', 300], ['quirks', 'Habits and quirks', 300], ['world', 'Home and friends', 600]];
+  const storyNotesOf = (body) => Object.fromEntries(STORY_NOTES.map(([k, , max]) => [k, clampStr(body[k], max)]));
+  const notesText = (n) => STORY_NOTES.filter(([k]) => n[k]).map(([k, label]) => `${label}: ${n[k]}`).join('\n');
+
+  // AI help on the new-character form. The author gives a short briefing (and/or has filled some fields); the AI returns
+  // every field — name, look, art style, personality and story notes — for them to check. Fields the author already wrote
+  // are kept and only sharpened; the briefing can also ask for changes. Nothing is drawn or saved.
+  const ENHANCE_CHAR_INSTRUCTIONS = `You help a parent invent a character for the bedtime picture books and story cards they make for their young children. You get their briefing (a sentence or two, sometimes a request to change something) and whatever form fields they have already filled (some or all may be empty). Return every field, complete and ready for them to check:
+- Keep every detail the author chose, in their voice, and follow the briefing. Fill empty fields with ideas that fit everything else. If a filled field contradicts a change the briefing asks for, follow the briefing.
+- name: keep the author's name if given; otherwise a short, warm, easy-to-say name, optionally with a descriptor ("Pip the Pancake Dragon").
+- description: what the character is and how they look, written so an illustrator can draw them the same way every time — kind or species, size, body shape, face and eyes, colours, markings, one or two signature features, anything they always wear or carry. 2–4 sentences. No personality here.
+- style: keep the author's art style if given; otherwise one warm children's picture-book rendering style that suits the character, under 15 words.
+- personality: 3–5 traits, comma separated, warm and child-friendly, with one small flaw that makes stories happen (shy, impatient, a bit clumsy…).
+- loves: 2–4 specific things they love (foods, activities, objects, places).
+- worries: 1–3 gentle, relatable fears or worries a young child understands (the dark, being left out, loud noises) — never frightening or adult.
+- voice: how they talk — rhythm, favourite words, a short catchphrase in quotes.
+- quirks: 2–4 recognisable habits a reader would spot on any page.
+- world: where they live and who their friends or family are, 1–2 sentences.
+Simple words, concrete details, nothing scary, violent or adult. If the author named an existing copyrighted character, make an original one inspired by the idea instead.`;
+  const ENHANCE_CHAR_SCHEMA = obj({
+    name: str('under 60 characters'), description: str('under 900 characters'), style: str('under 250 characters'), personality: str('under 250 characters'),
+    loves: str('under 250 characters'), worries: str('under 250 characters'), voice: str('under 250 characters'), quirks: str('under 250 characters'), world: str('under 500 characters'),
+  });
+  async function enhanceCharacter(body) {
+    const name = clampStr(body.name, 80), brief = clampStr(body.brief, 2000), style = clampStr(body.style, 300);
+    const idea = clampStr(body.idea || body.instructions, 2000);
+    const notes = storyNotesOf(body);
+    if (!idea && !name && !brief && !notesText(notes)) throw new HttpError(400, 'Write a sentence or two about the character first.');
+    const input = [idea ? `Briefing from the author: ${idea}` : 'Briefing: (none — work from the fields)', '', 'Form so far:',
+      `Name: ${name || '(empty)'}`, `Description: ${brief || '(empty)'}`, `Art style: ${style || '(empty)'}`,
+      ...STORY_NOTES.map(([k, label]) => `${label}: ${notes[k] || '(empty)'}`)].join('\n');
+    const { parsed: d, costUsd } = await llmJson({ name: 'character_enhance', model: CARD_MODEL, effort: 'low', instructions: ENHANCE_CHAR_INSTRUCTIONS, schema: ENHANCE_CHAR_SCHEMA, log: { type: 'character_enhance', name }, input });
+    const out = { name: name || clampStr(d.name, 80), brief: clampStr(d.description, 2000), style: clampStr(d.style, 300) || style, ...storyNotesOf(d), costUsd };
+    await appendLog({ type: 'character_enhanced', name: out.name, idea: idea || null, costUsd });
+    return out;
+  }
+
+  async function designCharacter(body, progress = () => {}) {
+    const name = clampStr(body.name, 80);
+    const brief = clampStr(body.brief, 2000);
+    const styleWish = clampStr(body.style, 300);
+    const notes = storyNotesOf(body);
+    if (!name) throw new HttpError(400, 'Give the character a name.');
+    if (!brief) throw new HttpError(400, 'Describe the character: what kind of animal or creature, how they look, what they are like.');
+    const total = { costUsd: 0 };
+    progress({ phase: 'Designing the look from your description', force: true });
+    const { parsed: d, costUsd: designCost } = await llmJson({ name: 'character_design', model: CARD_MODEL, effort: 'low', instructions: DESIGN_INSTRUCTIONS, schema: DESIGN_SCHEMA, log: { type: 'character_design', name },
+      input: [`Name: ${name}`, `Brief: ${brief}`, styleWish ? `Art style wanted: ${styleWish}` : 'Art style: not specified — pick a warm, simple children\'s picture-book style.',
+        notesText(notes) && `Who they are (let it show in the design, e.g. a shy character's posture):\n${notesText(notes)}`].filter(Boolean).join('\n') });
+    total.costUsd += designCost || 0;
+    const fields = { description: clampStr(d.description, 1000), outfit: clampStr(d.outfit, 300), palette: clampStr(d.palette, 300), style: clampStr(styleWish || d.style, 300), personality: notes.personality || clampStr(d.personality, 300), loves: notes.loves, worries: notes.worries, voice: notes.voice, quirks: notes.quirks, world: notes.world };
+
+    progress({ phase: `Drawing the master picture of ${name}`, force: true });
+    const prompt = [
+      `Character master drawing of "${name}", an original children's picture-book character.`,
+      '', `Show ${name} exactly once: full body, friendly neutral pose, three-quarter front view, centred, filling most of the frame, on a plain white background.`,
+      `Appearance: ${fields.description}`,
+      fields.outfit && !/^none\.?$/i.test(fields.outfit) ? `Outfit and accessories: ${fields.outfit}` : 'A simple cartoon animal character with no outfit, hats or accessories.',
+      `Colours: ${fields.palette}`, `Rendering style: ${fields.style}`, `Personality to show in the face and posture: ${fields.personality}`,
+      '', 'Constraints:', '- Plain white background, soft even lighting, no scene, no props, no panels, no borders.', '- No other characters.', '- No text, letters, labels or watermarks.',
+    ].join('\n');
+    const r = await handleGenerate({ prompt, originalPrompt: `${name} — character master (from description)`, model: 'gpt-image-2.5-sunburst', quality: 'high', size: '1024x1024', format: 'png', n: 1, tags: ['character-master', slugify(name)] }, { ai: { feature: 'character_design_master' } });
+    const master = await handleUpdate(r.images[0].id, { title: `${name} — character master` });
+    total.costUsd += master.costUsd || 0;
+    const character = await handleCreateCharacter({ name, ...fields, refs: [{ recordId: master.id, role: 'identity' }] });
+    const out = { characterId: character.id, master, sheet: null, bible: null, error: null, bibleError: null };
+    try {
+      progress({ phase: `Drawing ${name}'s turnaround sheet`, force: true });
+      const sheet = await handleCharacterSheet(character.id, {}, { refs: { characterId: character.id } });
+      out.sheet = sheet.record; total.costUsd += sheet.record.costUsd || 0;
+      progress({ phase: `Writing and drawing ${name}'s character bible`, force: true });
+      const bible = await characterBible(character.id, {}).catch((e) => ({ error: e.message }));
+      out.bible = bible.record || null; out.bibleError = bible.error || null; total.costUsd += bible.record?.costUsd || 0;
+    } catch (e) { out.error = e.message; }
+    await appendLog({ type: 'character_designed', name, characterId: character.id, brief, masterId: master.id, sheetId: out.sheet?.id || null, bibleId: out.bible?.id || null, error: out.error || out.bibleError, costUsd: total.costUsd });
+    return { ...out, costUsd: total.costUsd };
+  }
+
   async function handleCastBible(id, castId, body = {}) {
     const s = await getSeries(id);
     const c = s.cast.find((x) => x.id === castId);
@@ -1636,7 +1762,7 @@ Leave text that already follows the rules exactly as it is.`,
     const now = new Date().toISOString();
     const brief = cleanBrief(body.brief);
     const tpl = brief.templateId ? await getTemplate(brief.templateId).catch(() => null) : null;
-    const s = { id: crypto.randomUUID(), createdAt: now, updatedAt: now, brief, title: '', logline: '', styleGuide: '', spine: '', world: '', foundation: Object.fromEntries(FOUNDATION_FIELDS.map(([k]) => [k, ''])), editorNotes: '', refrain: '', hiddenFriend: '', cast: [], cards: [], image: cleanImage({ size: tpl?.size, ...(body.image || {}) }) };
+    const s = { id: crypto.randomUUID(), createdAt: now, updatedAt: now, brief, title: '', logline: '', styleGuide: '', spine: '', world: '', foundation: Object.fromEntries(FOUNDATION_FIELDS.map(([k]) => [k, ''])), editorNotes: '', refrain: '', hiddenFriend: '', cast: [], cards: [], image: cleanImage({ size: brief.kind === 'story' ? STORY_SIZE : tpl?.size, ...(body.image || {}) }) };
     await inherit(s);
     await writeJsonAtomic(seriesFile(s.id), s);
     await appendLog({ type: 'card_series_created', seriesId: s.id, kind: brief.kind, templateId: brief.templateId, premise: brief.premise });
@@ -1741,6 +1867,8 @@ Leave text that already follows the rules exactly as it is.`,
       else throw new HttpError(404, 'Not found.');
       return true;
     }
+    if (p === '/api/cards/characters/enhance' && m === 'POST') { send(res, 200, await enhanceCharacter(await readJson(req))); return true; }
+    if (p === '/api/cards/characters/design' && m === 'POST') { const body = await readJson(req); await streamed(res, url, CARD_MODEL, (progress) => designCharacter(body, progress)); return true; }
     if (m === 'POST' && /^\/api\/cards\/characters\/[^/]+\/bible$/.test(p)) { send(res, 200, await characterBible(decodeURIComponent(p.split('/')[4]), {}, await readJson(req))); return true; }
     if (p === '/api/cards/series' && m === 'GET') { send(res, 200, await listSeries()); return true; }
     if (p === '/api/cards/series' && m === 'POST') { send(res, 200, await handleCreateSeries(await readJson(req))); return true; }

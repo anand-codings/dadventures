@@ -77,6 +77,28 @@ under the picture (✓ or ⚠ with **Redraw fixing these**). Switch it off with 
 
 Illustrations are normal History records titled `<book> — page N` and tagged `book`, `<book-slug>`, `page-N`. **📖 Preview**
 shows the book as pages (and prints one page per sheet); **⬇ Manuscript** exports Markdown with text, briefs and image paths.
+**🖨 Print Sheets** lays the book out for double-sided printing and opens it in Print Sheets (flip on the long
+edge; change paper and grid there). New books are drawn at 2176 × 2816, a quarter of a Letter sheet (4.25 × 5.5 in), so
+four pages fill an 8.5 × 11 sheet with no margin and no gap; a book drawn in any other shape opens as Tabloid 2 × 2 with gaps: the cover prints on its own with a blank back, then each piece carries two pages back to
+back (page 1 on the front with page 2 behind it, then 3 and 4, …), so the cut pieces stack and read like a book. Chapter title
+pictures take their place in the reading order, an odd last page has a blank back, and the upscaled version of a picture is
+used when there is one. Every page needs a picture first.
+**Varied pictures.** Every story page gets its own camera set-up (wide from above, close-up on a face, low angle, from
+behind a character, side view, bird's-eye…), chosen across the whole book: a planned shot is kept, strong feelings go close,
+arriving somewhere new goes wide, and no set-up repeats within three pages. The camera sits right under the scene in the
+prompt and outranks viewing rules in the world note; the story world is limited to the page's own place, and the reference
+page is shown for rendering only, never for its framing. Redrawing a book in page order lets each page use a newly varied
+neighbour as its reference.
+
+**Page types.** *Brief & settings → Pictures → Page style*: **Classic picture book** (one picture and the story text per
+page), **Mixed toddler pages** (full pictures and 2–4 panel scenes with tiny captions, a play box such as "Can you find…?",
+and a line for grown-ups) or **Comic panels** (mostly panels with speech bubbles and a "Did you know?" fact box). With a
+designed style, **🧩 Design the pages** has the AI choose each page's layout and write its captions, speech, panel pictures
+and boxes from the story; each page's dropdown overrides its layout (Auto hands it back), and every caption and box can be
+edited under the page. Only the captions and boxes are lettered into the picture; the full story text stays for reading
+aloud. Books copied from Flash Cards bring each card's layout and boxes along, and keep pictures, designs and settings made
+here when the story is refreshed.
+
 Books are stored as `output/books/<id>.json`; deleting a book keeps its images. Outline, script and illustration events are
 written to `prompt-log.jsonl`.
 

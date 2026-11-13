@@ -29,6 +29,7 @@
 body[data-section=books] { --sec: #d85a4c; }
 body[data-section=cards] { --sec: #e8ac25; }
 body[data-section=characters] { --sec: #4f8fc8; }
+body[data-section=groups] { --sec: #8a6fd1; }
 body[data-section=images] { --sec: #33a8a2; }
 body[data-section=print] { --sec: #62a858; }
 body[data-section=costs] { --sec: #b07e58; }
@@ -282,7 +283,7 @@ table.calls th { padding: var(--s2) var(--s3); }
 .dv-actions:empty { display: none; }
 .dv-actions .btn:not(.primary) { background: var(--navy-2); border-color: var(--navy-line); color: var(--navy-text); box-shadow: 0 3px 0 rgba(0, 0, 0, .3); }
 .dv-head:has(.dv-actions > *) .topbar-meta { display: none; }
-html.dv-on .shelf-head, html.dv-on .bk-head, html.dv-on .ws-bar .back, html.dv-on .chars-page #back { display: none; }
+html.dv-on .shelf-head, html.dv-on .bk-head, html.dv-on .ws-bar .back, html.dv-on .chars-page #back, html.dv-on .chars-page #new-back { display: none; }
 @media (max-width: 1000px) { .dv-head { flex-wrap: wrap; } }
 
 /* stepper: done ✓ — current pill — upcoming, joined by a line */
@@ -381,3 +382,12 @@ body.books .dv-head { max-width: calc(1400px - 2 * var(--gutter)); }   /* same r
 @keyframes dv-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
 @keyframes dv-taxi { from { background-position: -10px center; } }
 @keyframes dv-taxi-bar { to { background-position: 36px 0; } }
+
+/* Characters → new character from a description */
+.new-char { display: flex; flex-direction: column; gap: var(--s4); max-width: 820px; }
+.new-char h1 { margin: 0; }
+.new-story, .ai-box { display: flex; flex-direction: column; gap: var(--s3); }
+.ai-box { padding: var(--s3) var(--s4); border: 1px dashed currentColor; border-radius: 10px; opacity: .95; }
+.ai-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.ai-row .hint { flex: 1 1 260px; }
+.new-char .ai-filled { box-shadow: 0 0 0 2px #e9b949 inset; background-color: #fff8e1; }

@@ -1,14 +1,14 @@
 const $ = (id) => document.getElementById(id);
 const els = {
-  shelf: $('shelf'), shelfGrid: $('shelf-grid'), shelfMeta: $('shelf-meta'), workspace: $('workspace'), back: $('back'), subtabs: $('subtabs'),
+  shelf: $('shelf'), shelfGrid: $('shelf-grid'), shelfMeta: $('shelf-meta'), shelfSort: $('shelf-sort'), shelfChar: $('shelf-char'), workspace: $('workspace'), back: $('back'), subtabs: $('subtabs'),
   tabSetup: $('tab-setup'), tabStory: $('tab-story'), tabPages: $('tab-pages'), tabOutline: $('tab-outline'), tabPrompts: $('tab-prompts'), promptList: $('prompt-list'), promptSide: $('prompt-side'),
   setting: $('setting'), fillBrief: $('fill-brief'), briefGaps: $('brief-gaps'), storyline: $('storyline'), world: $('world'), arcBar: $('arc-bar'), arcLegend: $('arc-legend'),
   outline: $('outline'), outlineMeta: $('outline-meta'), fillDetails: $('fill-details'), bkHead: $('bk-head'), bkCover: $('bk-cover'), headLogline: $('head-logline'), headChips: $('head-chips'),
-  readToggle: $('read-toggle'), fromSeries: $('from-series'),
+  readToggle: $('read-toggle'), toSheets: $('to-sheets'), fromSeries: $('from-series'), pageWarn: $('page-warn'),
   bookSelect: $('book-select'), newBook: $('new-book'), deleteBook: $('delete-book'),
   briefBox: $('brief-box'), suggest: $('suggest'), ideas: $('ideas'),
   premise: $('premise'), audience: $('audience'), pageCount: $('page-count'), tone: $('tone'), themeBrief: $('theme-brief'), style: $('style'), briefNotes: $('brief-notes'), briefChars: $('brief-chars'),
-  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'), proof: $('proof'), refs: $('refs'), worldSheet: $('world-sheet'), refrain: $('refrain'), device: $('device'), shotBar: $('shot-bar'), editPass: $('edit-pass'), editBox: $('edit-box'), logic: $('logic'), checkLogic: $('check-logic'), logicBox: $('logic-box'),
+  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'), pageStyle: $('page-style'), pageStyleHint: $('page-style-hint'), proof: $('proof'), refs: $('refs'), worldSheet: $('world-sheet'), refrain: $('refrain'), device: $('device'), shotBar: $('shot-bar'), editPass: $('edit-pass'), editBox: $('edit-box'), logic: $('logic'), checkLogic: $('check-logic'), logicBox: $('logic-box'),
   stepper: $('stepper'), next: $('next'), stop: $('stop'), undo: $('undo'), saveState: $('save-state'), status: $('status'), strip: $('strip'), topbar: $('topbar-meta'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
   empty: $('empty'), book: $('book'), editor: $('editor'), title: $('title'), logline: $('logline'), theme: $('theme'), styleGuide: $('style-guide'),
@@ -181,6 +181,77 @@ async function flush() {
 }
 window.addEventListener('beforeunload', (e) => { if (Object.keys(pending).length) { flush(); e.preventDefault(); } });
 
+// ---------- pages in fours ----------
+// The cover prints with page 1 on its back, so the cover plus the pages come in fours (3, 7, 11, 15 … story pages) and the
+// book prints double-sided with every back filled (15 pages + cover = two Tabloid 2x2 sheets). Editing can leave it off by a
+// few; the book then says how many pages to add or remove.
+const PAGE_STEP = 4;
+const snapFours = (n) => Math.min(31, Math.max(PAGE_STEP - 1, Math.ceil(((Number(n) || 0) + 1) / PAGE_STEP) * PAGE_STEP - 1));
+function fourHint(n, what = 'story page') {
+  const over = (n + 1) % PAGE_STEP;
+  if (!n || !over) return '';
+  const add = PAGE_STEP - over;
+  return `This book has ${n} ${what}${n === 1 ? '' : 's'} plus the cover. The cover and pages print in fours (3, 7, 11, 15 … pages) so every back is filled: add ${add} page${add === 1 ? '' : 's'}${n > over ? ` or remove ${over}` : ''}.`;
+}
+function renderPageWarn(b) {
+  const n = b ? b.pages.filter((p) => p.kind === 'page').length : 0;
+  const msg = fourHint(n);
+  els.pageWarn.hidden = !msg;
+  els.pageWarn.textContent = msg ? `${msg}${b.fromSeries ? ' Do it in Flash Cards → Series, where this story is made.' : ''}` : '';
+}
+
+// ---------- Print Sheets ----------
+// A quarter of a Letter sheet is 4.25 × 5.5 in (17:22). Pictures of that shape tile a Letter sheet 2 × 2 with nothing left over.
+const isQuarterLetter = (r) => Boolean(r?.width && r?.height) && Math.abs(Math.min(r.width, r.height) / Math.max(r.width, r.height) - 17 / 22) < 0.01;
+const QUARTER_LETTER_SHEET = { page: 'letter', margin: 0, gutter: 0, fit: 'cover', backFit: 'cover', cutMarks: false, pack: false };
+// The largest live version of a picture: its upscale when there is one, else the picture itself.
+function printRecord(id) {
+  if (!id) return null;
+  const ok = (r) => r && !r.deletedAt && !r.missing;
+  const up = [...records.values()].filter((r) => r.upscaleOf === id && ok(r)).sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+  return up || (ok(records.get(id)) ? records.get(id) : null);
+}
+// Double-sided book layout: the cover has page 1 on its back, then each piece carries the next two pages back to back
+// (2 on the front, 3 behind it; 4 and 5 on the next), so a stack of cut pieces reads like a book. Chapter title
+// pictures take their place in the reading order.
+function bookPieces(b) {
+  const seq = []; let ch = '';
+  for (const p of b.pages) {
+    if (p.kind !== 'page') continue;
+    if (p.chapter && p.chapter !== ch) { ch = p.chapter; if (b.chapterArt?.[ch]) seq.push({ id: b.chapterArt[ch], label: `the “${ch}” chapter card` }); }
+    seq.push({ id: p.imageId, label: `page ${p.n}` });
+  }
+  const missing = seq.filter((x) => !printRecord(x.id)).map((x) => x.label);
+  const ref = (id) => ({ source: 'output', rel: printRecord(id).file });
+  const cover = b.pages.find((p) => p.kind === 'cover');
+  const hasCover = Boolean(cover && printRecord(cover.imageId));
+  const faces = [...(hasCover ? [{ id: cover.imageId }] : []), ...seq];
+  const items = [];
+  if (!missing.length) for (let i = 0; i < faces.length; i += 2) items.push({ ...ref(faces[i].id), copies: 1, back: faces[i + 1] ? ref(faces[i + 1].id) : null });
+  return { items, missing, pages: seq.length, hasCover };
+}
+async function sendToSheets() {
+  if (!book) return;
+  await flush();
+  const { items, missing, pages, hasCover } = bookPieces(book);
+  if (missing.length) return setStatus(`Every page needs a picture before the book can be printed back to back. Still missing: ${escapeHtml(missing.slice(0, 6).join(', '))}${missing.length > 6 ? ` and ${missing.length - 6} more` : ''}.`, 'error');
+  if (!pages) return setStatus('This book has no pages yet.', 'error');
+  const faces = pages + (hasCover ? 1 : 0);
+  if (faces % PAGE_STEP && !confirm(`${hasCover ? fourHint(pages, 'printed page') : `This book has ${pages} printed pages and no cover picture yet; pages print in fours so every back is filled.`}${faces % 2 ? ' As it is, the last piece prints with a blank back.' : ''}\n\nSend it to Print Sheets anyway?`)) return;
+  const first = printRecord(book.pages.find((p) => p.kind === 'page')?.imageId);
+  const orientation = first && first.width > first.height ? 'landscape' : 'portrait';
+  // Pages drawn in the quarter-Letter shape go four to a Letter sheet with no margin and no gap; any other shape keeps the Tabloid sheet with gaps.
+  const faceIds = [...(hasCover ? [book.pages.find((p) => p.kind === 'cover').imageId] : []), ...book.pages.filter((p) => p.kind === 'page').map((p) => p.imageId)];
+  const paper = faceIds.every((id) => isQuarterLetter(printRecord(id))) ? QUARTER_LETTER_SHEET : { page: 'tabloid' };
+  const spec = { ...config.sheets.defaults, ...paper, orientation, grid: '2x2', duplex: true, flip: 'long', items };
+  try {
+    const sheet = await api('POST', '/api/sheets', { name: `${book.title || 'Story book'} (book, double-sided)`, spec });
+    localStorage.setItem('dadventures.sheetDraft', JSON.stringify({ sheetId: sheet.id, name: sheet.name, spec: sheet.spec }));
+    setStatus(`Sent ${pages} page${pages === 1 ? '' : 's'}${hasCover ? ' and the cover' : ''} to Print Sheets.`, 'ok');
+    location.href = `/sheets.html?sheet=${encodeURIComponent(sheet.id)}`;
+  } catch (e) { setStatus(escapeHtml(e.message), 'error'); }
+}
+
 // ---------- book list ----------
 async function loadBooks() {
   books = await api('GET', '/api/books');
@@ -191,14 +262,58 @@ async function loadBooks() {
     els.bookSelect.appendChild(o);
   }
   els.bookSelect.value = book?.id || '';
+  // A server started before the list carried cast names: read each book once for its cast.
+  if (books.some((b) => !Array.isArray(b.cast))) await Promise.all(books.map(async (b) => {
+    if (Array.isArray(b.cast)) return;
+    const full = await api('GET', `/api/books/${b.id}`).catch(() => null);
+    b.cast = (full?.cast || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+  }));
   if (!book && !creating) renderShelf();
 }
 const bookFinished = (b) => Boolean(b.pages) && b.scripted >= b.pages && b.illustrated >= b.pages + 1;
-function renderShelf() {
-  els.shelfMeta.textContent = books.length ? `${books.length} book${books.length === 1 ? '' : 's'} · click one to open it` : '';
-  // Books still being made come first: they are what you came back for. A finished book needs no label or bar.
-  const ordered = [...books.filter((b) => !bookFinished(b)), ...books.filter(bookFinished)];
-  els.shelfGrid.innerHTML = ordered.map((b) => {
+// Shelf order and character filter are remembered on this browser.
+const SHELF_KEY = 'dadventures.shelf';
+const shelfPrefs = (() => { try { return { sort: 'progress', char: '', ...JSON.parse(localStorage.getItem(SHELF_KEY) || '{}') }; } catch { return { sort: 'progress', char: '' }; } })();
+const plain = (t) => t.replace(/[‘’ʼ`]/g, "'").replace(/[“”]/g, '"');   // curly and straight quotes sort together
+const byText = (a, z) => plain(a).localeCompare(plain(z), undefined, { sensitivity: 'base', numeric: true });
+const castOf = (b) => (Array.isArray(b.cast) ? b.cast : []);
+const SHELF_SORTS = {
+  // Books still being made come first: they are what you came back for. Within each half, the latest edit first (the server's order).
+  progress: (list) => [...list.filter((b) => !bookFinished(b)), ...list.filter(bookFinished)],
+  updated: (list) => [...list].sort((a, z) => (z.updatedAt || '').localeCompare(a.updatedAt || '')),
+  created: (list) => [...list].sort((a, z) => (z.createdAt || '').localeCompare(a.createdAt || '')),
+  'created-asc': (list) => [...list].sort((a, z) => (a.createdAt || '').localeCompare(z.createdAt || '')),
+  title: (list) => [...list].sort((a, z) => byText(a.title || '', z.title || '')),
+};
+function shelfGroups(list) {
+  if (shelfPrefs.sort !== 'character') return [{ name: '', books: (SHELF_SORTS[shelfPrefs.sort] || SHELF_SORTS.progress)(list) }];
+  // One shelf per lead character (the first in the cast); when filtering, the chosen character leads. Newest first within a shelf.
+  const groups = new Map();
+  for (const b of SHELF_SORTS.created(list)) {
+    const lead = (shelfPrefs.char && castOf(b).includes(shelfPrefs.char) ? shelfPrefs.char : castOf(b)[0]) || '';
+    if (!groups.has(lead)) groups.set(lead, []);
+    groups.get(lead).push(b);
+  }
+  return [...groups].map(([name, books]) => ({ name: name || 'No characters', books }))
+    .sort((a, z) => (a.name === 'No characters') - (z.name === 'No characters') || byText(a.name, z.name));
+}
+function renderShelfTools() {
+  const names = [...new Set(books.flatMap(castOf))].sort(byText);
+  if (shelfPrefs.char && !names.includes(shelfPrefs.char)) shelfPrefs.char = '';
+  els.shelfChar.innerHTML = '<option value="">Everyone</option>' + names.map((n) => {
+    const count = books.filter((b) => castOf(b).includes(n)).length;
+    return `<option value="${escapeHtml(n)}">${escapeHtml(n)} (${count})</option>`;
+  }).join('');
+  els.shelfChar.value = shelfPrefs.char;
+  els.shelfChar.closest('.shelf-pick').hidden = !names.length;
+  els.shelfSort.value = SHELF_SORTS[shelfPrefs.sort] || shelfPrefs.sort === 'character' ? shelfPrefs.sort : 'progress';
+}
+function setShelfPref(k, v) {
+  shelfPrefs[k] = v;
+  localStorage.setItem(SHELF_KEY, JSON.stringify(shelfPrefs));
+  renderShelf();
+}
+function shelfBook(b) {
     const cover = b.coverImageId && imageUrl(b.coverImageId);
     const total = b.pages ? b.pages + 1 : 0;
     const done = bookFinished(b);
@@ -208,7 +323,17 @@ function renderShelf() {
       <b>${escapeHtml(b.title)}</b>
       <span class="shelf-state">${state}</span>
       ${total && !done ? `<span class="bar"><i style="width:${Math.round((100 * b.illustrated) / total)}%"></i></span>` : ''}</button>`;
-  }).join('') + `<button class="shelf-book shelf-new" id="shelf-new" type="button"><span class="shelf-cover"><span class="shelf-blank">+</span></span><b>New book</b><span class="shelf-state">Start from an idea</span></button>`;
+}
+function renderShelf() {
+  renderShelfTools();
+  const shown = shelfPrefs.char ? books.filter((b) => castOf(b).includes(shelfPrefs.char)) : books;
+  els.shelfMeta.textContent = !books.length ? ''
+    : shelfPrefs.char ? `${shown.length} of ${books.length} books with ${shelfPrefs.char} · click one to open it`
+    : `${books.length} book${books.length === 1 ? '' : 's'} · click one to open it`;
+  const newTile = `<button class="shelf-book shelf-new" id="shelf-new" type="button"><span class="shelf-cover"><span class="shelf-blank">+</span></span><b>New book</b><span class="shelf-state">Start from an idea</span></button>`;
+  const groups = shelfGroups(shown);
+  els.shelfGrid.innerHTML = groups.map((g, i) => (g.name ? `<h2 class="shelf-group">${escapeHtml(g.name)} <span class="hint">${g.books.length}</span></h2>` : '')
+    + g.books.map(shelfBook).join('') + (i === groups.length - 1 ? newTile : '')).join('') || newTile;
 }
 async function closeBook() {
   await flush();
@@ -244,9 +369,15 @@ async function deleteBook() {
 }
 
 function briefFromForm() {
-  return { premise: els.premise.value, audience: els.audience.value, pageCount: Number(els.pageCount.value) || 12, tone: els.tone.value, theme: els.themeBrief.value, setting: els.setting.value, style: els.style.value, notes: els.briefNotes.value, characterIds: [...briefChars] };
+  return { premise: els.premise.value, audience: els.audience.value, pageCount: snapFours(Number(els.pageCount.value) || 11), tone: els.tone.value, theme: els.themeBrief.value, setting: els.setting.value, style: els.style.value, notes: els.briefNotes.value, characterIds: [...briefChars] };
 }
-const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked, proof: els.proof.checked, refs: els.refs.checked });
+const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked, proof: els.proof.checked, refs: els.refs.checked, pageStyle: els.pageStyle.value || 'classic' });
+// Page types: a designed style gives each page a layout of panels with captions and boxes (see src/books.js PAGE_STYLES).
+const pageStyle = () => book?.image.pageStyle || 'classic';
+const isDesigned = () => pageStyle() !== 'classic';
+const layoutOf = (id) => (config.books.layouts || []).find((l) => l.id === id);
+const undesigned = () => storyPages().filter((p) => (p.text || p.beat) && !p.design);
+function renderPageStyleHint() { els.pageStyleHint.textContent = (config.books.pageStyles || []).find((x) => x.id === els.pageStyle.value)?.hint || ''; }
 // Create the book on its first AI step, or save the brief and settings of the open one.
 async function ensureBook() {
   if (book) { queue({ brief: briefFromForm(), image: imageFromForm() }); await flush(); return book; }
@@ -271,6 +402,9 @@ function nextAction() {
   if (!s.outlined) return { step: 'outline', label: 'Draft the outline', run: draftOutline, disabled: !els.premise.value.trim() };
   if (!s.scripted) return { step: 'scripts', label: s.written ? `Write the remaining ${s.pages - s.written} pages` : 'Write the page text', run: () => writeScripts(true) };
   const missing = missingPictures().length;
+  // A designed page style: pages get their layouts, captions and boxes before their prompts are written.
+  const toDesign = isDesigned() ? undesigned().length : 0;
+  if (toDesign) return { step: 'prompts', label: `🧩 Design ${toDesign === s.pages ? 'the pages' : `${toDesign} more page${toDesign > 1 ? 's' : ''}`} (layouts, captions, play boxes)`, run: () => designPages() };
   // Pictures cost money and prompts do not, so the prompts are written out and checked before anything is drawn.
   if (missing && !s.promptsDone) return { step: 'prompts', label: s.prompted ? `Write the remaining ${s.promptable - s.prompted} picture prompts` : 'Write the picture prompts', run: () => writePrompts() };
   if (missing) {
@@ -307,12 +441,12 @@ function refreshFlow() {
     els.fillDetails.hidden = !s.gaps;
     els.outlineMeta.textContent = s.gaps ? `· ${s.gaps} planning note${s.gaps === 1 ? '' : 's'} still blank (outlined in amber)` : '· every page is fully planned ✓';
   }
-  for (const b of els.pages.querySelectorAll('.p-image, .rw-go, .rw-chip')) b.disabled = busy;
+  for (const b of els.pages.querySelectorAll('.p-image, .rw-go, .rw-chip, .p-layout, .d-make')) b.disabled = busy;
   for (const b of els.tabPrompts.querySelectorAll('button:not([data-f])')) b.disabled = busy;
   const spend = book ? book.pages.flatMap((p) => p.imageIds).reduce((sum, id) => sum + (records.get(id)?.costUsd || 0), 0) : 0;
   if (s.outlined && book) renderHead();
   syncHead();
-  const range = audience().words, offPages = storyPages().filter((p) => p.text && (words(p.text) < range[0] || words(p.text) > range[1])).map((p) => p.n);
+  const range = audience().words, offPages = isDesigned() ? [] : storyPages().filter((p) => p.text && (words(p.text) < range[0] || words(p.text) > range[1])).map((p) => p.n);
   els.pagesMeta.textContent = s.outlined ? `${s.written}/${s.pages} written · ${s.pictured}/${s.all} pictures · picture spend ≈ ${fmtCost(spend)}${offPages.length ? ` · ⚠ page${offPages.length === 1 ? '' : 's'} ${offPages.join(', ')} outside ${range[0]}–${range[1]} words` : ''}` : '';
   els.editPass.disabled = busy; els.editPass.hidden = !s.written || Boolean(book?.fromSeries);
   for (const b of els.worldSheet.querySelectorAll('button')) b.disabled = busy;
@@ -360,6 +494,7 @@ function renderAll() {
     els.tone.value = b.brief.tone; els.themeBrief.value = b.brief.theme; els.setting.value = b.brief.setting || ''; els.style.value = b.brief.style; els.briefNotes.value = b.brief.notes;
     briefChars.clear(); for (const id of b.brief.characterIds) briefChars.add(id);
     els.imgModel.value = b.image.model; els.imgQuality.value = b.image.quality; els.textInImage.checked = b.image.textInImage; els.proof.checked = b.image.proof !== false; els.refs.checked = b.image.refs !== false;
+    els.pageStyle.value = b.image.pageStyle || 'classic'; renderPageStyleHint();
     if (![...els.imgSize.options].some((o) => o.value === b.image.size)) fillSelect(els.imgSize, [...config.sizePresets, { id: b.image.size, label: b.image.size }], b.image.size);
     els.imgSize.value = b.image.size;
   }
@@ -378,8 +513,9 @@ function renderAll() {
   els.tabSetup.hidden = tab !== 'setup'; els.tabStory.hidden = tab !== 'story'; els.tabPages.hidden = tab !== 'pages'; els.tabOutline.hidden = tab !== 'outline'; els.tabPrompts.hidden = tab !== 'prompts';
   els.bkHead.hidden = !outlined;
   els.readToggle.textContent = reading ? '✎ Edit' : '📖 Read';
+  renderPageWarn(b);
   els.fromSeries.hidden = !b?.fromSeries;
-  if (b?.fromSeries) els.fromSeries.innerHTML = `This book is a copy of a Flash Cards story and is refreshed whenever that story changes. Edit it in <a href="/cards.html?tab=series&series=${encodeURIComponent(b.fromSeries)}">Flash Cards → Series</a>; changes made here will be overwritten.`;
+  if (b?.fromSeries) els.fromSeries.innerHTML = `This book is a copy of a Flash Cards story and is refreshed whenever that story changes. Edit it in <a href="/cards.html?tab=series&series=${encodeURIComponent(b.fromSeries)}">Flash Cards → Series</a>: the story, its text and its plan are overwritten from there. Pictures drawn here, page designs you edit here and the picture settings are kept.`;
   if (outlined) renderHead();
   els.suggest.textContent = els.premise.value.trim() ? '✨ Develop this idea' : '✨ Suggest ideas';
   if (outlined) {
@@ -409,7 +545,7 @@ function syncHead() {
     ? [`Ages ${audience().id}`, `${s.pages} pages`, `${s.written}/${s.pages} written`, `${s.pictured}/${s.all} pictures`, s.stale ? `${s.stale} prompt${s.stale === 1 ? '' : 's'} need${s.stale === 1 ? 's' : ''} a look` : ''].filter(Boolean).join(' · ')
     : null;
   sh.setHead({ back: { label: 'All books', run: closeBook }, title: outlined ? els.title : book?.title || 'New book', sub });
-  setActions(...(outlined ? [els.readToggle, els.exportMd] : []));
+  setActions(...(outlined ? [els.readToggle, els.exportMd, els.toSheets] : []));
 }
 function renderHead() {
   const s = flowState();
@@ -482,10 +618,12 @@ function renderPages() {
           <b>${pageLabel(p)}</b>
           ${isCover ? '' : '<span class="wc"></span>'}
           <span class="spacer"></span>
-          <select class="p-place" title="Where the text goes; the picture keeps this area calm">${config.books.placements.map((x) => `<option value="${x}">text at ${x}</option>`).join('')}</select>
+          ${!isCover && isDesigned() ? `<select class="p-layout" title="This page's type. Choosing one re-designs the page's captions and boxes for it; Auto lets the AI choose."><option value="">Auto${p.design && p.design.by !== 'author' ? ` · ${escapeHtml(layoutOf(p.design.layout)?.label || '')}` : ''}</option>${(config.books.layouts || []).map((l) => `<option value="${l.id}" title="${escapeHtml(l.when)}">${escapeHtml(l.label)}</option>`).join('')}</select>` : ''}
+          <select class="p-place"${!isCover && isDesigned() ? ' hidden' : ''} title="Where the text goes; the picture keeps this area calm">${config.books.placements.map((x) => `<option value="${x}">text at ${x}</option>`).join('')}</select>
           ${isCover ? '' : '<button class="mini p-add" type="button" title="Insert a blank page after this one">+ Add page after</button><button class="mini danger p-rm" type="button" title="Delete this page (↶ Undo brings it back)">Delete page</button>'}
         </div>
         ${isCover ? `<div class="cover-title">${escapeHtml(book.title)}</div>` : `<textarea class="p-text" rows="3" placeholder="${p.beat ? 'Not written yet — step 2 writes this, or type your own.' : 'Type the words for this page.'}"></textarea>`}
+        ${!isCover && isDesigned() ? designHtml(p) : ''}
         ${isCover ? '' : `<div class="rewrite">${QUICK_REWRITES.map(([label], i) => `<button class="rw-chip" type="button" data-i="${i}">${label}</button>`).join('')}<input class="rw-input" type="text" placeholder="…or say what to change, then Enter"><button class="btn secondary small rw-go" type="button" title="Rewrite this page">✍</button></div>`}
         <details class="brief"${p.imageId ? '' : ' open'}>
           <summary>${isCover ? 'Cover picture' : 'Story beat & picture brief'} <span class="hint"></span></summary>
@@ -499,6 +637,11 @@ function renderPages() {
       </div>`;
     const q = (s) => card.querySelector(s);
     q('.p-place').value = p.textPlacement;
+    if (q('.p-layout')) {
+      q('.p-layout').value = p.design?.by === 'author' ? p.design.layout : '';
+      q('.p-layout').addEventListener('change', () => designPages([p.id], { [p.id]: q('.p-layout').value }));
+    }
+    wireDesign(p, card);
     q('.p-ill').value = p.illustration;
     q('.brief .hint').textContent = p.characters.length ? `· ${p.characters.join(', ')}` : '';
     if (q('.p-beat')) { q('.p-beat').value = p.beat; q('.p-beat').addEventListener('input', () => setPage(p.id, { beat: q('.p-beat').value })); }
@@ -512,7 +655,10 @@ function renderPages() {
     }
     if (q('.p-text')) {
       q('.p-text').value = p.text;
-      const wc = () => { const n = words(q('.p-text').value); const over = n > range[1], under = n && n < range[0]; q('.wc').textContent = `${n} / ${range[0]}–${range[1]} words`; q('.wc').className = `wc${over ? ' over' : under ? ' under' : n ? ' ok' : ''}`; };
+      const wc = () => { const n = words(q('.p-text').value);
+        // In a designed style the story text is read aloud, not printed: only the captions are on the page.
+        if (isDesigned()) { q('.wc').textContent = `${n} words to read aloud`; q('.wc').className = 'wc'; return; }
+        const over = n > range[1], under = n && n < range[0]; q('.wc').textContent = `${n} / ${range[0]}–${range[1]} words`; q('.wc').className = `wc${over ? ' over' : under ? ' under' : n ? ' ok' : ''}`; };
       wc(); q('.p-text').addEventListener('input', () => { wc(); queue({ pages: [{ id: p.id, text: q('.p-text').value }] }); });
       const run = (instructions) => rewritePage(p, card, instructions);
       for (const chip of card.querySelectorAll('.rw-chip')) chip.addEventListener('click', () => run(QUICK_REWRITES[chip.dataset.i][1]));
@@ -1054,6 +1200,52 @@ async function writeScripts(onlyMissing) {
   finally { setBusy(false); }
 }
 
+// Lays out pages for a designed style. pageIds: only these (default: pages not designed yet); layouts: { pageId: layout }
+// chosen by the author ('' = let the AI choose); all: redo every page.
+async function designPages(pageIds, layouts, all = false) {
+  if (busy) return;
+  const n = pageIds?.length || (all ? storyPages().length : undesigned().length);
+  setBusy(true);
+  const onProgress = showProgress(`Designing ${n} page${n > 1 ? 's' : ''}`);
+  try {
+    queue({ image: imageFromForm() }); await flush();
+    book = await streamApi(`/api/books/${book.id}/design`, { pageIds: pageIds || [], layouts: layouts || {}, all }, onProgress);
+    hideProgress(); reading = false; renderAll();
+    setStatus(`Designed ${n} page${n > 1 ? 's' : ''}. Check the captions and boxes under each page (change a page's type with its dropdown), then write the picture prompts.`, 'ok');
+  } catch (e) { hideProgress(); setStatus(`Designing failed: ${escapeHtml(e.message)}`, 'error'); }
+  finally { setBusy(false); }
+}
+// The editable design of one page: its panels (caption, speech, picture) and its boxes.
+function designHtml(p) {
+  const d = p.design;
+  if (!d) return `<div class="design empty"><span class="hint">Not designed yet.</span> <button class="btn secondary small d-make" type="button">🧩 Design this page</button></div>`;
+  const kinds = config.books.playKinds || [];
+  return `<div class="design">
+    <div class="d-head"><b>${escapeHtml(layoutOf(d.layout)?.label || d.layout)}</b><span class="hint">${d.by === 'author' ? 'chosen by you' : d.by === 'card' ? 'from the Flash Cards story' : 'chosen by the AI'} · lettered into the picture; the story text above is for reading aloud</span></div>
+    ${d.panels.map((x, i) => `<div class="d-panel" data-i="${i}"><span class="d-num">${d.panels.length > 1 ? i + 1 : '▣'}</span>
+      <input class="d-caption" type="text" maxlength="200" placeholder="Caption (≤ 9 words)" value="${escapeHtml(x.caption)}">
+      <input class="d-speech" type="text" maxlength="80" placeholder="Speech / sound word" value="${escapeHtml(x.speech)}">
+      <textarea class="d-visual" rows="2" placeholder="What this panel shows, and from where">${escapeHtml(x.visual)}</textarea></div>`).join('')}
+    <div class="d-box"><select class="d-play-type"><option value="">No play box</option>${kinds.map((k) => `<option value="${k.id}">${escapeHtml(k.heading)}</option>`).join('')}</select><input class="d-play" type="text" maxlength="200" placeholder="What the child does (≤ 8 words)" value="${escapeHtml(d.play.prompt)}"></div>
+    <div class="d-box"><span class="d-label">Did you know?</span><input class="d-fact" type="text" maxlength="300" placeholder="One true fact, or leave empty" value="${escapeHtml(d.fact)}"></div>
+    <div class="d-box"><span class="d-label">For grown-ups</span><input class="d-grown" type="text" maxlength="300" placeholder="A tip for the reader, or leave empty" value="${escapeHtml(d.grownups)}"></div>
+  </div>`;
+}
+function wireDesign(p, card) {
+  const box = card.querySelector('.design');
+  if (!box) return;
+  box.querySelector('.d-make')?.addEventListener('click', () => designPages([p.id]));
+  if (!p.design) return;
+  box.querySelector('.d-play-type').value = p.design.play.type || '';
+  const save = () => {
+    const d = { ...p.design, panels: [...box.querySelectorAll('.d-panel')].map((el) => ({ caption: el.querySelector('.d-caption').value, speech: el.querySelector('.d-speech').value, visual: el.querySelector('.d-visual').value })),
+      play: { type: box.querySelector('.d-play-type').value, prompt: box.querySelector('.d-play').value }, fact: box.querySelector('.d-fact').value, grownups: box.querySelector('.d-grown').value, by: 'author' };
+    p.design = d; queue({ pages: [{ id: p.id, design: d }] });
+    box.querySelector('.d-head .hint').textContent = 'edited by you · lettered into the picture; the story text above is for reading aloud';
+  };
+  for (const el of box.querySelectorAll('input, textarea, select')) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', save);
+}
+
 async function rewritePage(p, card, instructions) {
   if (busy) return;
   setBusy(true);
@@ -1240,7 +1432,8 @@ async function init() {
   fillSelect(els.audience, config.books.ageBands, '3-5');
   fillSelect(els.imgModel, config.imageModels, config.defaultImageModel);
   fillSelect(els.imgQuality, config.qualities, 'high');
-  fillSelect(els.imgSize, config.sizePresets, '2048x2048');
+  fillSelect(els.pageStyle, config.books.pageStyles || [{ id: 'classic', label: 'Classic picture book' }], 'classic');
+  fillSelect(els.imgSize, config.sizePresets, '2176x2816');
   els.topbar.textContent = config.hasApiKey ? `Words by ${config.books.model} · pictures by ${config.defaultImageModel.replace('gpt-image-', 'GPT Image ')}` : '⚠ Add your OpenAI key to .env, then restart';
   const [hist, chars] = await Promise.all([api('GET', '/api/history'), api('GET', '/api/characters')]);
   for (const r of hist) records.set(r.id, r);
@@ -1256,6 +1449,9 @@ async function init() {
   els.newBook.addEventListener('click', newBook);
   els.back.addEventListener('click', closeBook);
   els.readToggle.addEventListener('click', toggleReading);
+  els.toSheets.addEventListener('click', () => sendToSheets().catch((e) => setStatus(escapeHtml(e.message), 'error')));
+  els.shelfSort.addEventListener('change', () => setShelfPref('sort', els.shelfSort.value));
+  els.shelfChar.addEventListener('change', () => setShelfPref('char', els.shelfChar.value));
   els.shelfGrid.addEventListener('click', (e) => { const b = e.target.closest('.shelf-book'); if (b) (b.dataset.id ? openBook(b.dataset.id) : newBook()); });
   els.subtabs.addEventListener('click', async (e) => { const t = e.target.closest('[data-sub]'); if (t) { await flush(); subtab = t.dataset.sub; renderAll(); } });
   els.dlStory.addEventListener('change', renderReadBar);
@@ -1297,9 +1493,10 @@ async function init() {
     else toggleReading();
   });
   els.premise.addEventListener('input', () => { els.suggest.textContent = els.premise.value.trim() ? '✨ Develop this idea' : '✨ Suggest ideas'; refreshFlow(); });
+  els.pageCount.addEventListener('change', () => { const v = snapFours(els.pageCount.value); if (Number(els.pageCount.value) !== v) { els.pageCount.value = v; if (book) queue({ brief: briefFromForm() }); } });
   for (const el of [els.premise, els.tone, els.themeBrief, els.setting, els.style, els.briefNotes, els.pageCount]) el.addEventListener('input', () => { renderBriefGaps(); if (book) queue({ brief: briefFromForm() }); });
   els.audience.addEventListener('change', () => { if (book) { queue({ brief: briefFromForm() }); book.brief.audience = els.audience.value; if (book.pages.length && !reading) renderPages(); } });
-  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage, els.proof, els.refs]) el.addEventListener('change', () => { renderArtSummary(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); refreshFlow(); } });
+  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage, els.proof, els.refs, els.pageStyle]) el.addEventListener('change', () => { renderArtSummary(); renderPageStyleHint(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); if (el === els.pageStyle) flush().then(() => api('GET', `/api/books/${book.id}`)).then((b) => { book = b; renderAll(); }).catch(() => {}); else refreshFlow(); } });
   els.title.addEventListener('input', () => queue({ title: els.title.value }));
   els.logline.addEventListener('input', () => { queue({ logline: els.logline.value }); els.headLogline.textContent = els.logline.value; });
   els.theme.addEventListener('input', () => queue({ theme: els.theme.value }));

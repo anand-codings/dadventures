@@ -29,7 +29,9 @@ into reusable templates and makes new cards, and whole series of them, in the sa
    Consistency comes from three things, each a checkbox under *Picture settings*: the template's reference card, the first
    finished card of the series (sent with every later card), and Studio characters linked to cast members. A small
    "Series · 3 of 8" badge keeps printed cards in order. **⬆ Upscale ×4 for print** runs Real-ESRGAN on the finished cards and
-   **Send to Print Sheets** opens a Letter 8.5 × 11, 2 × 2, double-sided sheet with the series (upscaled copies when they exist).
+   **Send to Print Sheets** opens the series as a 2 × 2 sheet (upscaled copies when they exist). A story is drawn at
+   1088 × 1408, a quarter of a Letter sheet (4.25 × 5.5 in), so four cards fill an 8.5 × 11 sheet edge to edge with no
+   margin and no gap; cards in any other shape (2:3 sets, older stories) open as Tabloid 2 × 2 with gaps. Either way the sheet uses the Print Sheets defaults: double-sided, full resolution, lossless PNG.
 
 **Stories as one narrative.** For a Story the planner first writes a **story spine** (once upon a time / until one day /
 because of that / until finally / ever since): one want set up on card 1, each card caused by the one before, a low point,
@@ -91,7 +93,7 @@ drifts between cards: a character's colour or size, an object that vanishes or r
 has a *Redraw card N to match* button.
 
 **Card backs.** *🂠 Card backs* typesets a reverse side for the cover and every card (number, chapter, the read-aloud
-text, the play prompt, the note for grown-ups) as 2048 × 3072 images under `output/cards/backs/<series id>/`. It uses
+text, the play prompt, the note for grown-ups) as images in the shape of the fronts (2176 × 2816 for quarter-Letter cards, else 2048 × 3072) under `output/cards/backs/<series id>/`. It uses
 headless Google Chrome (set `CHROME_BIN` if it is installed elsewhere), costs nothing, and re-typesets only backs whose
 text changed. *Send to Print Sheets* then makes a double-sided sheet with each back behind its card.
 

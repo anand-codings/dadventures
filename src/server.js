@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { createBooks } from './books.js';
 import { createSheets } from './sheets.js';
 import { createCards } from './cards.js';
+import { createGroups } from './groups.js';
 import { createAi, IMAGE_PRICE, PRICING, sniffImage, responseText } from './ai.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   // the app folder (this file is in src/)
@@ -77,12 +78,15 @@ const SIZE_PRESETS = [
   { id: '2048x2048', label: '2048 × 2048 — 2K square' },
   { id: '2048x3072', label: '2048 × 3072 — 2K portrait 2:3' },
   { id: '3072x2048', label: '3072 × 2048 — 2K landscape 3:2' },
+  { id: '2176x2816', label: '2176 × 2816 — quarter Letter portrait (4 fill an 8.5 × 11 sheet)' },
+  { id: '2816x2176', label: '2816 × 2176 — quarter Letter landscape (4 fill an 11 × 8.5 sheet)' },
   { id: '2048x2560', label: '2048 × 2560 — 4:5 portrait (8×10 print)' },
   { id: '2560x2048', label: '2560 × 2048 — 5:4 landscape' },
   { id: '2160x3840', label: '2160 × 3840 — 4K portrait (experimental)' },
   { id: '3840x2160', label: '3840 × 2160 — 4K landscape (experimental)' },
   { id: '1024x1024', label: '1024 × 1024 — 1K square (draft)' },
   { id: '1024x1536', label: '1024 × 1536 — 1K portrait (draft)' },
+  { id: '1088x1408', label: '1088 × 1408 — quarter Letter portrait (draft; upscale for print)' },
   { id: '1536x1024', label: '1536 × 1024 — 1K landscape (draft)' },
 ];
 const QUALITIES = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -517,10 +521,10 @@ async function handleCreateCharacter(body) {
   const name = clampStr(body.name, 80);
   if (!name) throw new HttpError(400, 'Character name is required.');
   const character = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), name, refs: [] };
-  for (const k of CHAR_FIELDS) character[k] = clampStr(body[k], k === 'description' ? 1000 : 300);
+  for (const k of CHAR_FIELDS) character[k] = clampStr(body[k], fieldMax(k));
   for (const ref of (Array.isArray(body.refs) ? body.refs : []).slice(0, MAX_REFS)) await addRef(character, ref);
   await withCharacters((list) => list.push(character));
-  await appendLog({ type: 'character_created', id: character.id, name, description: character.description, outfit: character.outfit, palette: character.palette, style: character.style, personality: character.personality, refs: character.refs.length });
+  await appendLog({ type: 'character_created', id: character.id, name, description: character.description, outfit: character.outfit, palette: character.palette, style: character.style, personality: character.personality, ...Object.fromEntries(STORY_FIELDS.map((k) => [k, character[k]])), refs: character.refs.length });
   return publicCharacter(character);
 }
 
@@ -529,7 +533,7 @@ async function handleUpdateCharacter(id, body) {
     const c = list.find((x) => x.id === id);
     if (!c) throw new HttpError(404, 'Character not found.');
     if ('name' in body) { const n = clampStr(body.name, 80); if (!n) throw new HttpError(400, 'Character name is required.'); c.name = n; }
-    for (const k of CHAR_FIELDS) if (k in body) c[k] = clampStr(body[k], k === 'description' ? 1000 : 300);
+    for (const k of CHAR_FIELDS) if (k in body) c[k] = clampStr(body[k], fieldMax(k));
     if (body.refRoles && typeof body.refRoles === 'object') for (const r of c.refs) if (REF_ROLES[body.refRoles[r.id]]) r.role = body.refRoles[r.id];
     if (clampStr(body.primaryRef, 64)) { const i = c.refs.findIndex((r) => r.id === body.primaryRef); if (i > 0) c.refs.unshift(...c.refs.splice(i, 1)); }
     if (Array.isArray(body.removeRefs)) {
@@ -580,7 +584,11 @@ const REF_ROLES = {
   sheet: { label: 'Reference sheet (multi-view)', text: 'character reference sheet with several views. Use it to keep the design correct from every angle.' },
   style: { label: 'Style only (not the character)', text: 'style reference only. Borrow its art style, line quality and rendering; it does not depict the character.' },
 };
-const CHAR_FIELDS = ['description', 'outfit', 'palette', 'style', 'personality'];
+// Look fields go to the image model with every picture; story fields only go to the story writers (plans, pages, bibles).
+const LOOK_FIELDS = ['description', 'outfit', 'palette', 'style', 'personality'];
+const STORY_FIELDS = ['loves', 'worries', 'voice', 'quirks', 'world'];
+const CHAR_FIELDS = [...LOOK_FIELDS, ...STORY_FIELDS];
+const fieldMax = (k) => (k === 'description' ? 1000 : k === 'world' ? 600 : 300);
 const refRole = (r) => (REF_ROLES[r.role] ? r.role : 'identity');
 
 function identityLine(c) {
@@ -592,6 +600,12 @@ function identityLine(c) {
   if (c.personality) parts.push(`Personality: ${c.personality.replace(/\.?$/, '.')}`);
   return parts.join(' ');
 }
+// Who the character is, for whoever writes their stories: what they love and fear, how they talk, their habits, their world.
+function storyLine(c) {
+  const labels = { loves: 'Loves', worries: 'Worries', voice: 'How they talk', quirks: 'Habits and quirks', world: 'Home and friends' };
+  return STORY_FIELDS.filter((k) => c[k]).map((k) => `${labels[k]}: ${String(c[k]).trim().replace(/\.?$/, '.')}`).join(' ');
+}
+const writerLine = (c) => [identityLine(c), storyLine(c)].filter(Boolean).join(' ');
 
 // Build the character block appended to every prompt that uses references. Follows OpenAI's prompting guide:
 // assign each input image a numbered role, repeat the defining details in text, separate changes from constraints.
@@ -662,7 +676,7 @@ async function handleDescribeCharacter(body) {
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new HttpError(502, 'The model did not return valid JSON.'); }
   const out = {};
-  for (const k of CHAR_FIELDS) out[k] = clampStr(parsed[k], k === 'description' ? 1000 : 300);
+  for (const k of LOOK_FIELDS) out[k] = clampStr(parsed[k], fieldMax(k));
   await appendLog({ type: 'character_described', name: body.name || null, characterId: body.characterId || null, ...out });
   return out;
 }
@@ -1042,6 +1056,7 @@ async function route(req, res) {
   if (p.startsWith('/api/books') && await books.route(req, res, url, readHistory)) return;
   if (p.startsWith('/api/sheets') && await sheets.route(req, res, url)) return;
   if (p.startsWith('/api/cards') && await cards.route(req, res, url)) return;
+  if (p.startsWith('/api/groups') && await groups.route(req, res, p)) return;
   if (req.method === 'GET' && seg('/sheet-src/')) {
     const [sourceId, ...rest] = seg('/sheet-src/').split('/');
     const { dir, rel } = sheets.sourceFile(sourceId, rest.join('/'));
@@ -1055,10 +1070,14 @@ async function route(req, res) {
   throw new HttpError(404, 'Not found.');
 }
 
+// Character groups (crews with shared storylines); their notes go to the story writers alongside the characters.
+const groups = createGroups({ OUTPUT_DIR, HttpError, readJson, send, clampStr, appendLog, readJsonFile, writeJsonAtomic, readCharacters });
+const groupText = (chars, excludeId) => groups.writerText(chars, excludeId);
+
 const books = createBooks({
   OUTPUT_DIR, BOOK_MODEL, API_KEY, ai, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
-  readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, validateSize,
-  IMAGE_MODELS, QUALITIES, handleCharacterSheet, MAX_REFS,
+  readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, storyLine, writerLine, validateSize,
+  IMAGE_MODELS, QUALITIES, handleCharacterSheet, MAX_REFS, groupText,
   characterBible: (...args) => cards.characterBible(...args),
   recordFile: async (id) => { const rec = (await readHistory()).find((r) => r.id === id); return rec && !rec.deletedAt && !rec.missing ? path.join(OUTPUT_DIR, rec.file) : null; },
 });
@@ -1067,8 +1086,8 @@ const sheets = createSheets({ ROOT, OUTPUT_DIR, THUMBS_DIR, HttpError, send, rea
 
 const cards = createCards({
   OUTPUT_DIR, CARD_MODEL, CARD_VISION_MODEL, API_KEY, ai, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
-  readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, handleCharacterSheet, identityLine, validateSize, IMAGE_MODELS, QUALITIES,
-  listImages: sheets.listImages, resolveImage: sheets.resolveImage, handleUpdateCharacter,
+  readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, handleCharacterSheet, identityLine, storyLine, writerLine, validateSize, IMAGE_MODELS, QUALITIES,
+  listImages: sheets.listImages, resolveImage: sheets.resolveImage, handleUpdateCharacter, groupText,
   // Attach non-reference data (the written profile and the bible poster) to a studio character.
   setCharacterBible: (id, bible) => withCharacters((list) => { const c = list.find((x) => x.id === id); if (c) { c.bible = bible; c.updatedAt = new Date().toISOString(); } return c; }),
   // Absolute path of a live history image, or null.

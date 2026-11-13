@@ -11,7 +11,7 @@
 </head>
 <body class="cards">
   <header class="topbar">
-    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a class="on" href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/groups.html">Groups</a><a href="/books.html">Story Books</a><a class="on" href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
     <div class="topbar-meta" id="topbar-meta">Loading…</div>
   </header>
 
@@ -68,7 +68,7 @@
           <label class="field"><span>Topics <span class="hint">(optional, one per line — otherwise the planner chooses)</span></span><textarea id="topics" rows="2" placeholder="Sea anemone&#10;Hermit crab&#10;Limpet"></textarea></label>
           <div class="grid2">
             <label class="field"><span>Audience</span><select id="audience"></select></label>
-            <label class="field"><span>Cards</span><input id="card-count" type="number" min="1" max="40" value="6"></label>
+            <label class="field"><span id="card-count-label">Cards</span><input id="card-count" type="number" min="1" max="40" value="6"></label>
           </div>
           <label class="field"><span>Lesson <span class="hint">(stories: what the child takes away — leave empty and the planner picks one)</span></span><input id="lesson" type="text" placeholder="asking for help is brave · taking turns · it's okay to feel scared and try anyway"></label>
           <label class="field"><span>Tone <span class="hint">(optional)</span></span><input id="tone" type="text" placeholder="playful, full of wonder"></label>
@@ -187,6 +187,7 @@
           <div class="section-title">Cast <span class="hint">(recurring characters)</span> <button class="link" id="add-cast" type="button">+ add</button></div>
           <div class="cast" id="cast"></div>
           <div class="section-title">Cards <span class="hint" id="cards-meta"></span></div>
+          <div class="note-warn" id="cards-warn" hidden></div>
           <div class="pages" id="cards"></div>
           <button class="btn secondary small" id="add-card" type="button">+ Add a card</button>
         </div>
