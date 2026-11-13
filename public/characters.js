@@ -1,6 +1,7 @@
 // Characters page: everyone in the cast at a glance, and one page per character with their
 // reference pictures, sheets, written profile and every picture they appear in.
-// Creating and editing still happens in the editor on the Images page; this page links there.
+// New characters can be designed here from a description alone (master drawing, turnaround sheet and bible);
+// editing and starting from your own pictures happen in the editor on the Images page, which this page links to.
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -9,6 +10,7 @@ let characters = [];
 let records = [];        // history, newest first
 let currentId = null;
 let showing = null;      // key of the picture in the big viewer
+let designing = false;   // a description → character sheet run is in progress
 
 async function api(path) {
   const res = await fetch(path);
@@ -48,7 +50,7 @@ function syncUrl() { urlState.set({ character: currentId, show: currentId ? show
 // ---------- everyone ----------
 function renderCast() {
   const q = $('search').value.trim().toLowerCase();
-  const list = characters.filter((c) => !q || [c.name, c.description, c.personality, c.style, profileOf(c).epithets].join(' ').toLowerCase().includes(q));
+  const list = characters.filter((c) => !q || [c.name, c.description, c.personality, c.style, c.loves, c.voice, c.quirks, c.world, profileOf(c).epithets].join(' ').toLowerCase().includes(q));
   $('cast-count').textContent = characters.length ? `· ${characters.length}` : '';
   const cast = $('cast');
   cast.innerHTML = '';
@@ -72,7 +74,7 @@ function renderCast() {
   empty.hidden = list.length > 0;
   empty.innerHTML = characters.length
     ? 'No character matches that search.'
-    : 'No characters yet. <a href="/?character=new">Create one</a> from your own reference pictures, or save one from any generated image on the Images page.';
+    : 'No characters yet. <a href="/characters.html?character=new">Describe one</a> and the studio draws their character sheet, start from <a href="/?character=new">your own pictures</a>, or save one from any generated image on the Images page.';
 }
 
 // ---------- one character ----------
@@ -99,9 +101,14 @@ function renderProfile(c) {
     ${section('About', facts.length ? `<dl class="facts">${facts.map((f) => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd>`).join('')}</dl>` : '')}
     ${section('Appearance', para(c.description))}
     ${section('Personality', p.coreTraits?.length ? bullets(p.coreTraits) : para(c.personality))}
-    ${section('Wants and worries', para(p.wantAndWorry))}
+    ${section('Loves', para(c.loves))}
+    ${section('Worries', para(c.worries))}
+    ${section('How they talk', para(c.voice))}
+    ${section('Habits and quirks', para(c.quirks))}
+    ${section('Home and friends', para(c.world))}
+    ${section('Wants and worries', c.worries ? '' : para(p.wantAndWorry))}
     ${section('Usual mood', para(p.moodBaseline))}
-    ${section('Habits', bullets(p.habits))}
+    ${section('Habits', c.quirks ? '' : bullets(p.habits))}
     ${section('Outfit and accessories', c.outfit && c.outfit.toLowerCase() !== 'none' ? para(c.outfit) : '')}
     ${section('Colors', palette)}
     ${section('Design details', parts.length ? `<dl class="facts">${parts.map((x) => `<dt>${esc(x.name)}</dt><dd>${esc(x.note || x.description || '')}</dd>`).join('')}</dl>` : '')}
@@ -167,21 +174,25 @@ function renderSwitcher() {
 }
 
 function render() {
-  const c = characters.find((x) => x.id === currentId) || null;
-  if (!c) currentId = null;
-  $('cast-view').hidden = !!c;
+  const isNew = currentId === 'new';
+  const c = isNew ? null : characters.find((x) => x.id === currentId) || null;
+  if (!c && !isNew) currentId = null;
+  $('cast-view').hidden = !!c || isNew;
   $('one-view').hidden = !c;
-  document.title = `${c ? c.name : 'Characters'} — Dadventures`;
+  $('new-view').hidden = !isNew;
+  document.title = `${c ? c.name : isNew ? 'New character' : 'Characters'} — Dadventures`;
   $('topbar-meta').textContent = plural(characters.length, 'character');
-  syncHead(c);
+  syncHead(c, isNew);
+  if (isNew) { if (!designing) $('new-ask').focus(); return; }
   if (!c) return renderCast();
   renderSwitcher(); renderViewer(c); renderProfile(c); renderPictures(c);
 }
 
 // One character: the header bar names them, shows their face and carries the way back.
-function syncHead(c) {
+function syncHead(c, isNew = currentId === 'new') {
   const sh = window.dvShell;
   if (!sh) return;
+  if (isNew) { sh.setHead({ back: { label: 'All characters', run: () => openCharacter(null) }, title: 'New character', sub: 'from a description' }); sh.setMascot(null); return; }
   sh.setHead(c ? { back: { label: 'All characters', run: () => openCharacter(null) }, title: c.name, sub: plural(picturesOf(c).length, 'picture') } : { sub: characters.length ? `${plural(characters.length, 'character')} · the crew behind every bedtime story` : null });
   sh.setMascot(c && c.refs && c.refs[0] ? { url: c.refs[0].thumbUrl, name: c.name } : null);
 }
@@ -191,6 +202,102 @@ function openCharacter(id) {
   currentId = id; showing = null;
   render(); syncUrl();
   window.scrollTo(0, 0);
+}
+
+// ---------- a new character from a description ----------
+async function streamApi(path, body, onProgress) {
+  const res = await fetch(`${path}?stream=1`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `Request failed (${res.status})`); }
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '', result;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    for (let i; (i = buf.indexOf('\n')) >= 0;) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line) continue;
+      const m = JSON.parse(line);
+      if (m.progress) onProgress(m.progress);
+      else if (m.error) throw new Error(m.error);
+      else if ('done' in m) result = m.done;
+    }
+  }
+  if (result === undefined) throw new Error('The connection closed before the result arrived.');
+  return result;
+}
+
+const NOTE_FIELDS = ['personality', 'loves', 'worries', 'voice', 'quirks', 'world'];
+const FORM_FIELDS = ['name', 'brief', 'style', ...NOTE_FIELDS];
+const formValues = () => Object.fromEntries(FORM_FIELDS.map((k) => [k, $(`new-${k}`).value.trim()]));
+let undoValues = null;   // the form before the last AI enhance
+
+async function enhanceForm() {
+  const v = formValues(), idea = $('new-ask').value.trim();
+  if (!idea && !Object.values(v).some(Boolean)) { newStatus('Write a sentence or two about the character in the briefing box first.', 'error'); $('new-ask').focus(); return; }
+  $('new-enhance').disabled = true;
+  newStatus('<span class="spinner"></span>Filling in the details…');
+  try {
+    const res = await fetch('/api/cards/characters/enhance', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea, ...v }) });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(r.error || `Request failed (${res.status})`);
+    undoValues = v;
+    let changed = 0;
+    for (const k of FORM_FIELDS) {
+      const el = $(`new-${k}`);
+      if (r[k] && r[k] !== el.value.trim()) { el.value = r[k]; el.classList.add('ai-filled'); changed++; }
+    }
+    $('new-undo').hidden = false;
+    newStatus(`${changed ? `Filled in ${changed} field${changed === 1 ? '' : 's'} (highlighted).` : 'Nothing needed changing.'} Check them, edit anything you like, then create the character sheet. Change the briefing and run it again for other ideas.`, 'ok');
+    $('new-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) { newStatus(`AI help failed: ${esc(e.message)}`, 'error'); }
+  finally { $('new-enhance').disabled = false; }
+}
+function undoEnhance() {
+  if (!undoValues) return;
+  for (const k of FORM_FIELDS) { $(`new-${k}`).value = undoValues[k]; $(`new-${k}`).classList.remove('ai-filled'); }
+  undoValues = null; $('new-undo').hidden = true;
+  newStatus('Put back what you had before.', '');
+}
+
+function newStatus(html, kind = '') { $('new-status').className = `status ${kind}`.trim(); $('new-status').innerHTML = html; }
+
+async function createFromDescription() {
+  const v = formValues(), { name, brief } = v;
+  if ((!name || !brief) && $('new-ask').value.trim()) { newStatus('Click “✨ Fill in the rest” first to turn your briefing into the fields, then check them.', 'error'); $('new-enhance').focus(); return; }
+  if (!name) { newStatus('Give the character a name.', 'error'); $('new-name').focus(); return; }
+  if (!brief) { newStatus('Describe the character: what kind of animal or creature, how they look, what they are like.', 'error'); $('new-brief').focus(); return; }
+  if (characters.some((c) => c.name.toLowerCase() === name.toLowerCase()) && !confirm(`There is already a character called “${name}”. Create another one with the same name?`)) return;
+  designing = true;
+  const lock = ['new-ask', 'new-enhance', 'new-undo', 'new-create', ...FORM_FIELDS.map((k) => `new-${k}`)];
+  for (const id of lock) $(id).disabled = true;
+  const t0 = Date.now();
+  let phase = 'Starting';
+  const tick = () => newStatus(`<span class="spinner"></span>${esc(phase)}… ${Math.round((Date.now() - t0) / 1000)}s <span class="hint">(keep this tab open)</span>`);
+  tick(); const timer = setInterval(tick, 1000);
+  try {
+    const r = await streamApi('/api/cards/characters/design', v, (p) => { if (p.phase) { phase = p.phase; tick(); } });
+    clearInterval(timer);
+    characters = await api('/api/characters');
+    records = await api('/api/history');
+    if (r.error) {
+      newStatus(`${esc(name)} was created from the master picture, but the turnaround sheet failed: ${esc(r.error)}. Open <a href="/?character=${encodeURIComponent(r.characterId)}">Edit character</a> to try the sheet again.`, 'error');
+      return;
+    }
+    for (const id of ['new-ask', ...FORM_FIELDS.map((k) => `new-${k}`)]) { $(id).value = ''; $(id).classList.remove('ai-filled'); }
+    undoValues = null; $('new-undo').hidden = true;
+    newStatus('', '');
+    openCharacter(r.characterId);
+    if (r.bibleError) alert(`${name} is ready with a master picture and turnaround sheet, but the character bible failed: ${r.bibleError}\n\nUse “Edit character” → “Generate character sheets” to try again.`);
+  } catch (e) {
+    clearInterval(timer);
+    newStatus(`Could not create the character: ${esc(e.message)}`, 'error');
+    characters = await api('/api/characters').catch(() => characters);
+  } finally {
+    designing = false;
+    for (const id of lock) $(id).disabled = false;
+  }
 }
 
 function readUrl() {
@@ -203,6 +310,14 @@ function readUrl() {
 async function init() {
   $('search').addEventListener('input', () => { renderCast(); syncUrl(); });
   $('back').addEventListener('click', () => openCharacter(null));
+  $('new-back').addEventListener('click', () => openCharacter(null));
+  $('new-btn').addEventListener('click', (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); openCharacter('new'); });
+  $('new-create').addEventListener('click', createFromDescription);
+  $('new-enhance').addEventListener('click', enhanceForm);
+  $('new-undo').addEventListener('click', undoEnhance);
+  $('new-ask').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enhanceForm(); } });
+  // A highlighted (AI-filled) field counts as checked once you edit it.
+  for (const k of FORM_FIELDS) $(`new-${k}`).addEventListener('input', (e) => e.target.classList.remove('ai-filled'));
   urlState.onChange(readUrl);
   try {
     [characters, records] = await Promise.all([api('/api/characters'), api('/api/history')]);

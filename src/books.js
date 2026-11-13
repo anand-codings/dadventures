@@ -63,6 +63,82 @@ export const SHOTS = [
 ];
 const SHOT_IDS = SHOTS.map((x) => x.id);
 const shotLabel = (id) => SHOTS.find((x) => x.id === id)?.label || '';
+// Camera set-ups for page pictures. Without one the image model falls back to the same medium, eye-level line-up on
+// every page (and copies it from the reference page), so a book of one place turns into one picture fifteen times.
+// Each page gets its own; neighbouring pages never share one. close/wide/medium map to the planned shot.
+const CAMERAS = [
+  { id: 'wide-high', shot: 'wide', text: 'WIDE, from high above and a little to the side: the whole place spread out like a map, the characters small in it, their path or goal visible.' },
+  { id: 'close-face', shot: 'close', text: "CLOSE-UP on the main character's face and front feet, filling most of the picture, the feeling unmistakable; the others appear only partly at an edge or out of focus behind, the place reduced to a few big shapes." },
+  { id: 'low-up', shot: 'medium', text: 'LOW ANGLE, from the ground looking up: the characters loom tall against the sky, with big foreground leaves or stones framing the picture at the bottom corners.' },
+  { id: 'behind', shot: 'medium', text: "FROM BEHIND the main character, over their shoulder: we see their back and head large in one lower corner and look past them at what they are looking at, which fills the rest of the picture." },
+  { id: 'side-travel', shot: 'medium', text: 'SIDE VIEW, in profile, the characters moving across the picture in single file or at different distances (one near and big, one further and smaller), with the way ahead open in front of them.' },
+  { id: 'close-detail', shot: 'close', text: 'CLOSE-UP on the one thing the page is about (a foot on a stone, a face beside a leaf, two friends touching), large and simple; anything else only in part at the edges.' },
+  { id: 'top-down', shot: 'wide', text: "BIRD'S-EYE VIEW looking straight down: the ground as a bright pattern and the characters seen from above, their positions easy to read." },
+  { id: 'front-near', shot: 'medium', text: 'FRONT VIEW at the characters\' eye level, near: one character big in the foreground, the others clearly further back and smaller, so they stand at different depths.' },
+];
+// ---------- page types ----------
+// How a book's pages are built. Classic: one full picture and the story text. The designed styles (the layouts of the
+// Flash Cards toddler and comic stories) give every page a layout of 1–4 panels with a short caption each, and boxes
+// under the pictures: something for the child to do, a "Did you know?" fact, a line for grown-ups. The full story text
+// stays with the page for reading aloud; only the captions and boxes are lettered into the picture.
+export const PAGE_STYLES = [
+  { id: 'classic', label: 'Classic picture book', hint: 'one full-page picture and the story text on every page' },
+  { id: 'mixed', label: 'Mixed toddler pages', hint: 'every page looks different: full pictures and 2–4 panel scenes with tiny captions, a play box ("Can you find…?") and a line for grown-ups' },
+  { id: 'comic', label: 'Comic panels', hint: 'mostly 2–4 numbered panels with captions and speech bubbles, and a "Did you know?" fact box' },
+];
+const PAGE_STYLE_IDS = PAGE_STYLES.map((x) => x.id);
+export const LAYOUTS = [
+  { id: 'picture', label: 'Full picture', panels: 1, when: 'the opening, the biggest surprise or reveal, arriving somewhere wonderful, or the cosy ending', guide: 'ONE large picture filling the whole picture area edge to edge, with a single caption strip along its bottom' },
+  { id: 'duo', label: '2 panels', panels: 2, when: 'a simple cause and effect, a peekaboo, a before and after, or a question and its answer', guide: 'TWO wide panels stacked one above the other, equal height, each with a caption strip; small corner numbers 1 and 2', positions: ['top panel', 'bottom panel'] },
+  { id: 'trio', label: '3 panels', panels: 3, when: 'arriving somewhere new and then two quick things that happen there', guide: 'ONE wide panel across the top (about 55% of the picture area) and TWO smaller square panels side by side beneath it, each with a caption strip; small corner numbers 1, 2 and 3', positions: ['wide top panel', 'bottom-left panel', 'bottom-right panel'] },
+  { id: 'quad', label: '4 panels', panels: 4, when: 'a quick, funny sequence of four small actions; at most once every six pages', guide: 'FOUR panels in a 2 × 2 grid read left to right, top to bottom, each with a caption strip; small corner numbers 1 to 4', positions: ['top-left panel', 'top-right panel', 'bottom-left panel', 'bottom-right panel'] },
+];
+const LAYOUT_IDS = LAYOUTS.map((x) => x.id);
+export const PLAY_KINDS = [
+  { id: 'find', heading: 'Can you find…?', icon: 'a pointing hand' },
+  { id: 'count', heading: 'How many…?', icon: 'little numbers 1 2 3' },
+  { id: 'move', heading: 'Your turn!', icon: 'wiggling arms' },
+  { id: 'sound', heading: 'Say it!', icon: 'an open, smiling mouth' },
+  { id: 'guess', heading: 'What do you think?', icon: 'a question mark' },
+];
+const PLAY_IDS = PLAY_KINDS.map((x) => x.id);
+const designed = (book, page) => page.kind === 'page' && (book.image?.pageStyle || 'classic') !== 'classic' && page.design?.panels?.length > 0;
+// Every word the designed page letters into its picture, in reading order.
+function designLettering(page) {
+  const d = page.design, play = PLAY_KINDS.find((k) => k.id === d.play?.type);
+  return [...d.panels.flatMap((x) => [x.caption, x.speech]), play && d.play.prompt && play.heading, play && d.play.prompt, d.fact && 'Did you know?', d.fact, d.grownups && `For grown-ups: ${d.grownups}`].filter(Boolean);
+}
+// What a clean design looks like; anything else from the model or the browser is dropped.
+function cleanDesign(v, by, clampStr) {
+  if (!v || typeof v !== 'object') return null;
+  const layout = LAYOUTS.find((l) => l.id === v.layout) || LAYOUTS[0];
+  const panels = (Array.isArray(v.panels) ? v.panels : []).slice(0, layout.panels).map((x) => ({ caption: clampStr(x?.caption, 200), speech: clampStr(x?.speech, 80), visual: clampStr(x?.visual, 800) }));
+  while (panels.length < layout.panels) panels.push({ caption: '', speech: '', visual: '' });
+  const type = PLAY_IDS.includes(v.play?.type) ? v.play.type : '';
+  // The heading is lettered by the page itself ("Your turn!"); a prompt that starts with it again loses the repeat.
+  const head = PLAY_KINDS.find((k) => k.id === type)?.heading.replace(/[…?!.]+$/, '');
+  const prompt = String(v.play?.prompt || '').replace(head ? new RegExp(`^${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[…?!.]*\\s*`, 'i') : /^$/, '');
+  return { layout: layout.id, by: ['ai', 'author', 'card'].includes(by) ? by : 'ai', panels, play: { type, prompt: type ? clampStr(prompt.charAt(0).toUpperCase() + prompt.slice(1), 200) : '' }, fact: clampStr(v.fact, 300), grownups: clampStr(String(v.grownups || '').replace(/^for grown-?ups:\s*/i, ''), 300) };
+}
+const SAD = /sad|cross|angry|scared|afraid|worried|lonely|upset|frustrat|grumpy|shy|nervous|cry/i;
+// One camera per page, chosen over the whole book by score: a planned shot wins; otherwise strong feelings go close and
+// the first page and each arrival in a new place go wide. No camera repeats within three pages, no shot size twice in a
+// row, and the least-used set-ups come first so the whole range gets used.
+const placeOf = (p) => String(p.place || '').toLowerCase().trim() || placeKey(p.setting);
+export function cameraPlan(pages) {
+  const out = new Map(), recent = [], used = Object.fromEntries(CAMERAS.map((c) => [c.id, 0]));
+  const story = pages.filter((p) => p.kind === 'page').sort((a, b) => a.n - b.n);
+  story.forEach((p, i) => {
+    const arrived = i === 0 || (placeOf(p) && placeOf(p) !== placeOf(story[i - 1]));
+    const want = SHOT_IDS.includes(p.shot) ? p.shot : SAD.test(p.emotion) ? 'close' : arrived ? 'wide' : '';
+    const last = CAMERAS.find((x) => x.id === recent[recent.length - 1]);
+    const score = (c) => (want && c.shot === want ? (p.shot ? 8 : 4) : 0) - (recent.slice(-2).includes(c.id) ? 20 : 0)
+      - (last && c.shot === last.shot ? 6 : 0) - (c.shot === 'wide' && !arrived && recent.slice(-3).some((id) => CAMERAS.find((x) => x.id === id).shot === 'wide') ? 3 : 0) - used[c.id] * 2;
+    const pick = CAMERAS.map((c, k) => ({ c, s: score(c), k: (k + i * 3) % CAMERAS.length })).sort((a, b) => b.s - a.s || a.k - b.k)[0].c;
+    out.set(p.id, pick); recent.push(pick.id); used[pick.id]++;
+  });
+  return out;
+}
 // The read-aloud devices of a book, kept as their own fields so the writer and the editor can hold every page to them.
 const VOICE_FIELDS = [['refrain', 300], ['device', 300]];
 const countWords = (t) => (String(t || '').trim() ? String(t).trim().split(/\s+/).length : 0);
@@ -76,6 +152,11 @@ export const visualStyle = (style) => String(style || '').split(/(?<=[.!?])\s+/)
 const placeKey = (setting) => String(setting || '').split(/[;(—]| - /)[0].toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const plain = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ');
 const MAX_PAGES = 32;
+// Story pages come in fours so the book prints double-sided with no blank backs (pages 1–2 and 3–4 back to back).
+// The cover prints with page 1 on its back, so the cover plus the story pages come in fours (3, 7, 11, 15 … pages):
+// every piece is then printed on both sides. 15 pages + cover = two double-sided Tabloid 2x2 sheets.
+const PAGE_STEP = 4;
+const inFours = (n, max) => Math.min(Math.floor((max + 1) / PAGE_STEP) * PAGE_STEP - 1, Math.max(PAGE_STEP - 1, Math.ceil(((Number(n) || 0) + 1) / PAGE_STEP) * PAGE_STEP - 1));
 
 const OUTLINE_INSTRUCTIONS = `You are an award-winning children's picture-book author and editor. From the user's brief, plan a short illustrated story book.
 
@@ -245,6 +326,38 @@ const DETAILS_SCHEMA = {
   },
 };
 
+const DESIGN_INSTRUCTIONS = `You are the art director of a children's picture book whose pages are designed like story cards: each page has a layout of one to four pictures (panels), a tiny caption under each, and small boxes under the pictures. The story and its full read-aloud text are settled; you turn each requested page into its design. Never change what happens.
+
+Layouts:
+${LAYOUTS.map((l) => `- ${l.id} (${l.panels} panel${l.panels > 1 ? 's' : ''}): for ${l.when}.`).join('\n')}
+- A page marked "layout chosen by the author" keeps that layout. Otherwise choose the layout that suits the page's moment. Across the book the layouts vary: never the same layout on three pages in a row, and the first and last pages are usually a full picture.
+
+Panels (exactly as many as the layout has, in reading order):
+- caption: one short, plain sentence saying what happens in that panel, using names, at most 9 words. Read in order, the captions of the whole book tell the story by themselves.
+- speech: what one character says or a sound word, at most 4 words ("Uh-oh!", "Hello, Bo!", "Whoosh!"), or "" for a quiet panel.
+- visual: what is drawn in that panel, for an illustrator who sees only this page: where, who is in it and where each stands, what they do, the one feeling on the face, and how close and from where the camera looks (very close, medium, far away, from above, from below, from behind). The panels of a page each use a different camera (vary both the distance and the angle: a close-up of a face, a view from above, from low down, from behind a character), and each shows a real step of this page's story. A viewing rule in the world note (such as "every view uses the same side view") is only for pictures that look inside or under something; it never makes all panels share one angle. Everything in a visual agrees with the page's text and its story facts. Refer to characters by name only; do not describe their looks or the art style.
+
+Boxes:
+- play: something the child does, by type: find ("Can you find…?": something that really is drawn in this page's panels), count ("How many…?": things really drawn, at most five), move ("Your turn!": an action to copy), sound ("Say it!": a sound to make), guess ("What do you think?": what happens next). "prompt" is only what comes after the heading, at most 8 words, and never repeats the heading's words (find: "Point to little Bo."; count: "Count the stones."; move: "Take a marching step."). Vary the type from page to page.
+- fact: one true, simple, checkable fact linked to something on the page (an animal, a plant, the weather), at most 15 words; "" when the page has none.
+- grownups: one tip for the adult reading along, at most 14 words (a question to ask, a gesture to share, a word to stress); without the words "For grown-ups".
+
+Which boxes a page has depends on the book's page style, given in the input. Words are for the age given: tiny, concrete, playful. English only.`;
+const DESIGN_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['pages'],
+  properties: { pages: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['n', 'layout', 'panels', 'playType', 'play', 'fact', 'grownups'], properties: {
+    n: { type: 'integer', description: 'page number' },
+    layout: { type: 'string', enum: LAYOUT_IDS },
+    panels: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['caption', 'speech', 'visual'], properties: { caption: { type: 'string' }, speech: { type: 'string' }, visual: { type: 'string' } } } },
+    playType: { type: 'string', enum: ['', ...PLAY_IDS] }, play: { type: 'string', description: 'the play prompt, or "" when playType is ""' },
+    fact: { type: 'string' }, grownups: { type: 'string' },
+  } } } },
+};
+const STYLE_BOXES = {
+  mixed: 'Mixed toddler pages: every page has a play box and a grown-ups tip; a fact only where the page shows something a fact fits naturally (about one page in four), otherwise "". About a third of the pages are full pictures.',
+  comic: 'Comic panels: most pages use 2–4 panels, with a speech bubble or sound word in most panels; every page has a fact; no play box (playType "") and no grown-ups tip (""), except a play box on the last page.',
+};
+
 const IDEAS_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['ideas'],
   properties: { ideas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['title', 'premise', 'tone', 'theme'], properties: {
@@ -288,6 +401,7 @@ export function createBooks(deps) {
   const { OUTPUT_DIR, BOOK_MODEL, API_KEY, HttpError, responseText, readJson, send, clampStr, slugify, appendLog,
     readJsonFile, writeJsonAtomic, readCharacters, handleGenerate, handleUpdate, handleCreateCharacter, publicCharacter, identityLine, validateSize,
     IMAGE_MODELS, QUALITIES } = deps;
+  const { storyLine = () => '', writerLine = identityLine, groupText = () => '' } = deps;
   const SEVERITIES = ['breaks', 'confusing', 'small'];
   const BOOKS_DIR = path.join(OUTPUT_DIR, 'books');
   const bookFile = (id) => {
@@ -301,7 +415,8 @@ export function createBooks(deps) {
     b.storyline = { ...Object.fromEntries(STORYLINE_FIELDS.map(([k]) => [k, ''])), ...(b.storyline || {}) };
     b.world ??= ''; b.brief.setting ??= ''; b.logic ??= null; b.edit ??= null; b.worldSheetId ??= null; b.anchorPageId ??= null;
     for (const [k] of VOICE_FIELDS) b[k] ??= '';
-    for (const p of b.pages) { p.arc ??= ''; p.shot ??= ''; for (const [k] of PAGE_META) p[k] ??= ''; }
+    b.image.pageStyle ??= 'classic';
+    for (const p of b.pages) { p.arc ??= ''; p.shot ??= ''; p.design ??= null; for (const [k] of PAGE_META) p[k] ??= ''; }
     // A Flash Cards mirror carries each card's state in `continuity`; show it as the page's state too rather than as a blank note.
     if (b.fromSeries) for (const p of b.pages) if (p.kind === 'page' && !p.state) p.state = p.continuity;
     return b;
@@ -333,14 +448,15 @@ export function createBooks(deps) {
       if (!b?.id) continue;
       const pages = b.pages.filter((p) => p.kind === 'page');
       out.push({ id: b.id, title: b.title || 'Untitled book', premise: b.brief.premise, createdAt: b.createdAt, updatedAt: b.updatedAt,
-        pages: pages.length, scripted: pages.filter((p) => p.text).length, illustrated: b.pages.filter((p) => p.imageId).length, coverImageId: b.pages.find((p) => p.kind === 'cover')?.imageId || null, fromSeries: Boolean(b.fromSeries) });
+        pages: pages.length, scripted: pages.filter((p) => p.text).length, illustrated: b.pages.filter((p) => p.imageId).length, coverImageId: b.pages.find((p) => p.kind === 'cover')?.imageId || null, fromSeries: Boolean(b.fromSeries),
+        cast: (b.cast || []).map((c) => String(c?.name || '').trim()).filter(Boolean) });
     }
     return out.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   }
 
   function cleanBrief(v = {}, prev = {}) {
     const pick = (k, max) => (k in v ? clampStr(v[k], max) : prev[k] ?? '');
-    const pageCount = Math.min(MAX_PAGES, Math.max(4, Number(v.pageCount ?? prev.pageCount) || 12));
+    const pageCount = inFours(Number(v.pageCount ?? prev.pageCount) || 11, MAX_PAGES);
     return {
       premise: pick('premise', 4000), audience: AGE_BANDS.some((a) => a.id === (v.audience ?? prev.audience)) ? (v.audience ?? prev.audience) : '3-5',
       pageCount, tone: pick('tone', 300), theme: pick('theme', 500), setting: pick('setting', 500), style: pick('style', 1000), notes: pick('notes', 4000),
@@ -350,14 +466,16 @@ export function createBooks(deps) {
   function cleanImage(v = {}, prev = {}) {
     const model = IMAGE_MODELS.some((m) => m.id === v.model) ? v.model : prev.model || IMAGE_MODELS[0].id;
     const quality = QUALITIES.includes(v.quality) ? v.quality : prev.quality || 'high';
-    let size = v.size ? String(v.size) : prev.size || '2048x2048';
+    let size = v.size ? String(v.size) : prev.size || '2176x2816';   // quarter Letter: four pages fill an 8.5 × 11 sheet edge to edge
     validateSize(size);
     // proof: every new picture is read by the proofreader and redrawn once if it contradicts the page (on unless switched off).
     // refs: earlier pictures of the book (and its world sheet) go to the illustrator as references (on unless switched off).
     return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage), proof: 'proof' in v ? Boolean(v.proof) : prev.proof !== false,
-      refs: 'refs' in v ? Boolean(v.refs) : prev.refs !== false };
+      refs: 'refs' in v ? Boolean(v.refs) : prev.refs !== false,
+      // pageStyle: classic (one picture + the story text) or a designed style (panels, captions and play boxes).
+      pageStyle: PAGE_STYLE_IDS.includes(v.pageStyle) ? v.pageStyle : PAGE_STYLE_IDS.includes(prev.pageStyle) ? prev.pageStyle : 'classic' };
   }
-  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', state: '', shot: '', focus: '', turn: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], check: null, ...fields });
+  const newPage = (kind, n, fields = {}) => ({ id: crypto.randomUUID(), kind, n, beat: '', arc: '', purpose: '', setting: '', emotion: '', continuity: '', state: '', shot: '', focus: '', turn: '', text: '', illustration: '', characters: [], textPlacement: 'bottom', imagePrompt: '', promptAuto: '', imageId: null, imageIds: [], check: null, design: null, ...fields });
 
   // ---------- LLM ----------
   // Streams the Responses API so long writing calls can report progress; onText receives the JSON text so far.
@@ -422,7 +540,7 @@ export function createBooks(deps) {
       clampStr(body.theme, 500) && `Theme: ${clampStr(body.theme, 500)}`,
       clampStr(body.setting, 500) && `Setting: ${clampStr(body.setting, 500)}`,
       clampStr(body.style, 1000) && `Illustration style: ${clampStr(body.style, 1000)}`,
-      chars.length && `Existing characters:\n${chars.map((c) => `- ${c.name}: ${identityLine(c)}`).join('\n')}`,
+      chars.length && `Existing characters:\n${chars.map((c) => `- ${c.name}: ${writerLine(c)}`).join('\n')}`,
     ].filter(Boolean).join('\n');
     const { parsed, durationMs, usage } = await llmJson('book_ideas', IDEAS_INSTRUCTIONS, input, IDEAS_SCHEMA, { type: 'book_ideas' },
       (t) => progress({ phase: `Brainstorming idea ${Math.min(4, countKey(t, 'title') || 1)} of 4`, snippet: lastString(t, 'title') }));
@@ -443,7 +561,7 @@ export function createBooks(deps) {
       `Story idea: ${brief.premise}`,
       `Audience: ages ${a.id} (${a.label}); ${a.guidance}. ${brief.pageCount} story pages.`,
       given.length ? `Details the author already chose (keep exactly):\n${given.map((k) => `- ${k}: ${brief[k]}`).join('\n')}` : 'The author has not chosen any details yet.',
-      chars.length && `Existing characters:\n${chars.map((c) => `- ${c.name}: ${identityLine(c)}`).join('\n')}`,
+      chars.length && `Existing characters:\n${chars.map((c) => `- ${c.name}: ${writerLine(c)}`).join('\n')}`,
     ].filter(Boolean).join('\n');
     const { parsed, durationMs, usage } = await llmJson('book_brief', BRIEF_INSTRUCTIONS, input, BRIEF_SCHEMA, { type: 'book_brief' },
       (t) => progress({ phase: `Filling in the details (${Math.min(BRIEF_FIELDS.length, countKey(t, 'tone') + countKey(t, 'theme') + countKey(t, 'setting') + countKey(t, 'style') + countKey(t, 'notes'))} of ${BRIEF_FIELDS.length})` }));
@@ -465,10 +583,13 @@ export function createBooks(deps) {
       b.setting && `Setting: ${b.setting}`,
       b.style && `Illustration style: ${b.style}`,
       b.notes && `Other notes: ${b.notes}`,
-      chars.length && `Existing characters to use (keep these exact names; their look is fixed by reference images):\n${chars.map((c) => `- ${c.name}: ${identityLine(c)}`).join('\n')}`,
+      chars.length && `Existing characters to use (keep these exact names; their look is fixed by reference images; keep their personality, likes, worries and way of talking):\n${chars.map((c) => `- ${c.name}: ${writerLine(c)}`).join('\n')}`,
+      chars.length && groupText(chars, book.id),
     ].filter(Boolean).join('\n');
   }
-  function planText(book) {
+  // all: the studio characters, so linked cast members carry their personality notes into the writing.
+  function planText(book, all = []) {
+    const persona = (c) => { const l = c.characterId && all.find((x) => x.id === c.characterId); const t = l && storyLine(l); return t ? ` Personality notes (keep them in character): ${t}` : ''; };
     const a = audienceOf(book);
     const pages = book.pages.filter((p) => p.kind === 'page');
     return [
@@ -480,7 +601,7 @@ export function createBooks(deps) {
       book.world ? `World: ${book.world}` : book.brief.setting && `Setting from the brief (the world note is still missing): ${book.brief.setting}`,
       book.refrain && `Refrain (these exact words): ${book.refrain}`,
       book.device && `Read-aloud device kept up through the book: ${book.device}`,
-      `Cast:\n${book.cast.map((c) => `- ${c.name} (${c.role}): ${c.description}`).join('\n')}`,
+      `Cast:\n${book.cast.map((c) => `- ${c.name} (${c.role}): ${c.description}${persona(c)}`).join('\n')}`,
       `Pages:\n${pages.map((p) => [
         `Page ${p.n}${p.arc ? ` [${arcLabel(p.arc)}]` : ''}: ${p.beat}`,
         p.purpose && `  Purpose: ${p.purpose}`,
@@ -622,7 +743,7 @@ export function createBooks(deps) {
     if (!pages.length) throw new HttpError(400, 'Generate an outline first.');
     if (pages.some((p) => !p.beat && !p.text)) throw new HttpError(400, 'Some pages have no beat yet. Say what happens on them first.');
     const total = pages.length;
-    const { parsed, durationMs, usage } = await llmJson('book_details', DETAILS_INSTRUCTIONS, planText(book), DETAILS_SCHEMA, { type: 'book_details', bookId: id },
+    const { parsed, durationMs, usage } = await llmJson('book_details', DETAILS_INSTRUCTIONS, planText(book, await readCharacters()), DETAILS_SCHEMA, { type: 'book_details', bookId: id },
       (t) => progress(!t.includes('"pages"') ? { phase: 'Working out the storyline' } : { phase: `Planning page ${Math.min(total, Math.max(1, countKey(t, 'n')))} of ${total}`, done: Math.max(0, countKey(t, 'continuity')), total, snippet: lastString(t, 'purpose') }));
     let filled = 0;
     const updated = await withBook(id, (b) => {
@@ -650,7 +771,7 @@ export function createBooks(deps) {
     const wanted = Array.isArray(body.pageIds) && body.pageIds.length ? pages.filter((p) => body.pageIds.includes(p.id)) : pages;
     if (!wanted.length) throw new HttpError(400, 'No matching pages.');
     const extra = clampStr(body.instructions, 2000);
-    const input = `${planText(book)}\n\nWrite pages: ${wanted.map((p) => p.n).join(', ')}${extra ? `\n\nRevision instructions: ${extra}` : ''}`;
+    const input = `${planText(book, await readCharacters())}\n\nWrite pages: ${wanted.map((p) => p.n).join(', ')}${extra ? `\n\nRevision instructions: ${extra}` : ''}`;
     const total = wanted.length;
     const { parsed, durationMs, usage } = await llmJson('book_scripts', SCRIPT_INSTRUCTIONS, input, SCRIPT_SCHEMA, { type: 'book_scripts', bookId: id, pages: wanted.map((p) => p.n) }, (t) => {
       const k = Math.min(total, Math.max(1, countKey(t, 'n')));
@@ -762,31 +883,73 @@ export function createBooks(deps) {
     return { shown: page.characters, absent: book.cast.map((c) => c.name).filter((n) => !page.characters.includes(n)) };
   }
   const withFix = (prompt, fixNotes) => (fixNotes ? `${prompt}\n\nA previous attempt at this picture had these mistakes — make sure this one does not:\n${fixNotes}` : prompt);
+  // The top of a designed page's prompt: the page layout, every panel with its own picture, and the boxes under them.
+  function designHead(book, page, pages, layout, palette) {
+    const d = page.design, play = PLAY_KINDS.find((k) => k.id === d.play.type);
+    const boxes = [
+      play && d.play.prompt && { pct: 14, text: `a rounded "play" box across the full width, with ${play.icon} as a small icon on the left, the heading "${play.heading}" and under it "${d.play.prompt}" in very large lettering` },
+      d.fact && { pct: 13, text: `a rounded "Did you know?" box across the full width, with a small spot illustration of the fact on the left and the fact beside it` },
+      d.grownups && { pct: 5, text: 'one tiny line of lettering at the very bottom edge for grown-ups' },
+    ].filter(Boolean);
+    const area = 100 - boxes.reduce((n, b) => n + b.pct, 0);
+    const pos = (i) => (layout.panels === 1 ? 'The picture' : `Panel ${i + 1} (${layout.positions[i]})`);
+    return [
+      `Children's picture book page for "${book.title}", page ${page.n} of ${pages}, designed like a story card: ${layout.panels === 1 ? 'one big picture' : `${layout.panels} picture panels`} with tiny captions${boxes.length ? ' and small boxes under the pictures' : ''}.`,
+      '', `Page layout (portrait, top to bottom): the picture area, about ${area}% of the page: ${layout.guide}.${boxes.map((b) => ` Then ${b.text} (about ${b.pct}%).`).join('')}`,
+      `Colour: this page has its own dominant colour palette${palette ? ` (${palette})` : ''}, used boldly across the whole page including the panel borders and boxes, so it looks different from the pages around it.`,
+      '', layout.panels === 1 ? 'The picture:' : 'Panels (each one a different moment, seen with a different camera: distance and angle change from panel to panel; these cameras outrank any viewing rule in the story world below):',
+      ...d.panels.map((x, i) => `- ${pos(i)}: ${x.visual || page.illustration || page.beat}${x.caption ? ` Caption strip: "${x.caption.replace(/"/g, "'")}".` : ''}${x.speech ? ` Speech bubble or sound word: "${x.speech.replace(/"/g, "'")}".` : ''}`),
+      play && d.play.prompt && (play.id === 'find' || play.id === 'count') ? `- Whatever the play box asks the child to find or count is clearly visible in the pictures above.` : '',
+      page.text ? `\nThe story of this page, for context only (it is NOT lettered on the page): ${page.text}` : '',
+    ].filter(Boolean);
+  }
   function pagePrompt(book, page, fixNotes = '') {
     const pages = book.pages.filter((p) => p.kind === 'page').length;
     const present = book.cast.filter((c) => page.characters.includes(c.name));
     const unlinked = present.filter((c) => !c.characterId);
     const isCover = page.kind === 'cover';
-    const lines = [
+    const design = designed(book, page) && page.design;
+    const layout = design && LAYOUTS.find((l) => l.id === design.layout);
+    const palette = page.setting ? (page.setting.split(';').slice(1).join(';').trim() || page.setting).replace(/\.$/, '') : '';
+    const lines = design ? designHead(book, page, pages, layout, palette) : [
       isCover ? `Front cover illustration for the children's picture book "${book.title}".` : `Children's picture book illustration for "${book.title}", page ${page.n} of ${pages}.`,
       '', `Scene: ${page.illustration || page.beat}`,
     ];
+    // The camera goes straight under the scene: lower down, the image model drifts back to a medium, eye-level line-up.
+    // A page of several panels has a camera per panel instead (in each panel's description).
+    const cam = !isCover && (!design || layout.panels === 1) && cameraPlan(book.pages).get(page.id);
+    if (cam) lines.push('', `CAMERA for this page — the most important instruction about the composition. It outranks any viewing rule in the story world below, and neighbouring pages use other set-ups, so this page must look clearly different from them at a glance:`,
+      `- ${cam.text}`,
+      '- Do not line the characters up side by side facing the viewer; place them at different depths, sizes and heights, turned towards each other or towards what matters.',
+      `- Give the background this page's own colours and light${palette ? ` (${palette})` : ''}, clearly different from the other places in the book.`);
     // Planning notes from the outline: the image model sees one page at a time, so each prompt carries its own context.
     // Each fact is said once: a written brief already names the place, and with story facts the carry-over is in them.
     const facts = storyFacts(book, page), who = inPicture(book, page);
     const brief = page.illustration, place = placeKey(page.setting);
+    // A short brief (a Flash Cards copy has only "title — setting") leaves the action to the beat.
+    const action = !isCover && !design && page.beat && brief && !plain(brief).includes(plain(page.beat).slice(0, 40)) && page.beat;
     const notes = [
+      action && `What happens: ${action} Draw it as ONE single picture (no panels); where this note mentions panels, show the most important moment.`,
       page.setting && !(brief && place && plain(brief).includes(place)) && `Setting: ${page.setting}`,
       page.emotion && `Mood: ${page.emotion}`,
-      !brief && (page.shot || page.focus) && `Framing: ${[page.shot && `${shotLabel(page.shot).toLowerCase()} shot`, page.focus && `the eye lands first on ${page.focus}`].filter(Boolean).join('; ')}`,
+      !brief && page.focus && `Focus: the eye lands first on ${page.focus}`,
       page.continuity && !(brief && facts.length) && `Carried over from earlier pages (must be visible and match): ${page.continuity}`,
-      (book.world || book.brief.setting) && `Story world (the same on every page): ${book.world || book.brief.setting}`,
+      (book.world || book.brief.setting) && (isCover
+        ? `Story world: ${book.world || book.brief.setting}`
+        : `Story world (keeps places and objects the same from page to page; draw ONLY the part of it where this page happens${page.place || page.setting ? ` — ${page.place || page.setting.split(/[;—]/)[0].trim()}` : ''} — and none of the other places or landmarks unless the scene above names them): ${book.world || book.brief.setting}`),
     ].filter(Boolean);
     if (notes.length) lines.push('', ...notes);
-    if (facts.length) lines.push('', 'Story facts — where everyone and everything is. The picture must agree with them; they are for drawing from, never for lettering:', ...facts.map((x) => `- ${x}`));
+    if (facts.length) lines.push('', `Story facts — where everyone and everything is. The picture must agree with them; they are for drawing from, never for lettering${cam?.shot === 'close' ? '. In this close-up, characters and things away from the focus may be cut off by the edge or left out of frame' : ''}:`, ...facts.map((x) => `- ${x}`));
     if (who) lines.push('', `In this picture: ${who.shown.join(', ')}.${who.absent.length ? ` NOT in this picture: ${who.absent.join(', ')}.` : ''}`);
     if (unlinked.length) lines.push('', `Characters (draw them exactly like this on every page):\n${unlinked.map((c) => `- ${c.name}: ${c.description}`).join('\n')}`);
     lines.push('', `Style (identical on every page of the book): ${visualStyle(book.styleGuide) || book.brief.style || 'warm, friendly picture-book illustration'}`);
+    if (design) {
+      lines.push('', 'Lettering — print exactly these words, each once, spelled exactly, and no other text anywhere:', ...designLettering(page).map((x) => `- "${x.replace(/"/g, "'")}"`),
+        'Caption strips are cream with very large, dark, rounded sans-serif lettering; speech bubbles are white with a dark outline, chunky comic lettering and a tail pointing at the speaker; a sound word may instead be big, bouncy and hand-lettered in a bright contrasting colour. Box headings are large and playful.',
+        '', 'Constraints:', '- Panels and boxes have rounded corners and a thick cream border; no outer frame, no watermark, no signature, no page number.');
+      if (who) lines.push('- Draw only the characters listed under "In this picture", each at most once per panel; no other named character appears anywhere, not even small or in the background.');
+      return withFix(lines.join('\n'), fixNotes);
+    }
     const area = { top: 'top quarter', bottom: 'bottom quarter', left: 'left third', right: 'right third' }[page.textPlacement] || 'bottom quarter';
     if (isCover) lines.push('', `Text: the title "${book.title}" in large, playful, highly legible lettering across the top. No other text.`);
     else if (book.image.textInImage && page.text) lines.push('', `Text: print exactly this text in the ${area}, in a clean, rounded, highly legible children's-book font on a calm area of the picture: "${page.text.replace(/"/g, "'")}". No other text.`);
@@ -795,6 +958,51 @@ export function createBooks(deps) {
     if (who) lines.push('- Draw only the characters listed under "In this picture", each exactly once; no other named character appears anywhere, not even small or in the background.');
     if (!isCover && !(book.image.textInImage && page.text)) lines.push('- No text, letters, numbers, captions or speech bubbles anywhere in the image.');
     return withFix(lines.join('\n'), fixNotes);
+  }
+
+  // ---------- page design ----------
+  // For a designed page style: each page gets a layout (chosen by the AI unless the author picked one), its panels with
+  // captions and a picture each, and its boxes. body.pageIds: only these pages (default: pages not designed yet; body.all:
+  // every page). body.layouts: { pageId: layout } chosen by the author ('' hands the choice back to the AI).
+  async function handleDesign(id, body = {}, progress = () => {}) {
+    const book = await getBook(id);
+    const style = book.image.pageStyle;
+    if (!STYLE_BOXES[style]) throw new HttpError(400, 'Choose a page style other than "Classic picture book" first (Setup → Pictures → Page style).');
+    const pages = book.pages.filter((p) => p.kind === 'page');
+    const only = Array.isArray(body.pageIds) && body.pageIds.length ? new Set(body.pageIds) : null;
+    const wanted = pages.filter((p) => (only ? only.has(p.id) : body.all || !p.design));
+    if (!wanted.length) throw new HttpError(400, 'Every page is already designed.');
+    if (wanted.some((p) => !p.text && !p.beat)) throw new HttpError(400, 'Write the page text first: a page is designed from its story.');
+    const chosen = body.layouts && typeof body.layouts === 'object' ? body.layouts : {};
+    const lockOf = (p) => (p.id in chosen ? (LAYOUT_IDS.includes(chosen[p.id]) ? chosen[p.id] : '') : p.design?.by === 'author' ? p.design.layout : '');
+    const a = audienceOf(book);
+    const input = [
+      `Book: "${book.title}"${book.logline ? ` — ${book.logline}` : ''}`, `Audience: ages ${a.id} (${a.label})`, `Page style: ${STYLE_BOXES[style]}`,
+      `Cast: ${book.cast.map((c) => `${c.name} (${c.role})`).join('; ')}`, book.world && `World: ${book.world}`,
+      `Pages:\n${pages.map((p) => {
+        const w = wanted.includes(p), lock = w && lockOf(p);
+        return [`Page ${p.n}${w ? ' [DESIGN THIS PAGE]' : ''}: ${p.text || p.beat}`, w && p.characters.length && `  In the picture: ${p.characters.join(', ')}`, w && p.setting && `  Setting: ${p.setting}`, w && p.emotion && `  Feeling: ${p.emotion}`,
+          w && p.state && `  Story facts at the end of the page: ${p.state}`, lock && `  Layout chosen by the author: ${lock}`, !w && p.design && `  (already designed: ${p.design.layout}${p.design.play.type ? `, play ${p.design.play.type}` : ''})`].filter(Boolean).join('\n');
+      }).join('\n')}`,
+      `Design pages: ${wanted.map((p) => p.n).join(', ')}`,
+    ].filter(Boolean).join('\n\n');
+    const total = wanted.length;
+    const { parsed, durationMs, usage } = await llmJson('book_design', DESIGN_INSTRUCTIONS, input, DESIGN_SCHEMA, { type: 'book_design', bookId: id, pages: wanted.map((p) => p.n) },
+      (t) => progress({ phase: `Designing page ${Math.min(total, Math.max(1, countKey(t, 'layout')))} of ${total}`, done: Math.max(0, countKey(t, 'grownups')), total, snippet: lastString(t, 'caption') }));
+    let made = 0;
+    const updated = await withBook(id, (b) => {
+      snapshot(b, total === 1 ? `Designed page ${wanted[0].n}` : 'Designed the pages');
+      for (const o of parsed.pages || []) {
+        const p = b.pages.find((x) => x.kind === 'page' && x.n === o.n && wanted.some((w) => w.id === x.id));
+        if (!p) continue;
+        const lock = lockOf(p);
+        p.design = cleanDesign({ layout: lock || o.layout, panels: o.panels, play: { type: o.playType, prompt: o.play }, fact: o.fact, grownups: o.grownups }, lock ? 'author' : 'ai', clampStr);
+        made++;
+      }
+      return b;
+    });
+    await appendLog({ type: 'book_design', bookId: id, style, pages: wanted.map((p) => p.n), designed: made, usage, durationMs });
+    return updated;
   }
 
   // ---------- picture prompts ----------
@@ -835,15 +1043,16 @@ export function createBooks(deps) {
     const file = recId && deps.recordFile && await deps.recordFile(recId);
     if (!file) throw new HttpError(400, 'This page has no picture to check.');
     const isCover = page.kind === 'cover';
-    const lettered = isCover ? book.title : book.image.textInImage && page.text ? page.text : '';
+    const design = designed(book, page) && page.design;
+    const lettered = isCover ? book.title : design ? designLettering(page).join('\n') : book.image.textInImage && page.text ? page.text : '';
     const facts = storyFacts(book, page), who = inPicture(book, page);
     const cast = book.cast.map((c) => `- ${c.name}: ${String(c.description || '').slice(0, 220)}`).join('\n');
     const label = isCover ? 'cover' : `page ${page.n}`;
     const input = [{ role: 'user', content: [{ type: 'input_text', text: [
       isCover ? `Front cover of "${book.title}".` : `Page ${page.n} of "${book.title}".`,
       lettered ? `LETTERING THAT MUST APPEAR (exactly this${isCover ? ', the title' : ''}, and no other text):\n${lettered}` : 'NO LETTERING IS EXPECTED: the picture must contain no words, letters, numbers, captions or speech bubbles at all.',
-      `WHAT THE PICTURE SHOULD SHOW:\n${page.illustration || page.beat}`,
-      !isCover && page.text && !lettered && `The words printed next to it (not in the picture): ${page.text}`,
+      design ? `WHAT THE PAGE SHOULD SHOW (${LAYOUTS.find((l) => l.id === design.layout).label.toLowerCase()}, in reading order):\n${design.panels.map((x, i) => `${i + 1}. ${x.visual || page.illustration || page.beat}`).join('\n')}` : `WHAT THE PICTURE SHOULD SHOW:\n${page.illustration || page.beat}`,
+      !isCover && page.text && !design && !lettered && `The words printed next to it (not in the picture): ${page.text}`,
       who ? `NAMED CHARACTERS — must show: ${who.shown.join(', ')}; must NOT show: ${who.absent.join(', ') || '—'}` : isCover && page.characters.length ? `NAMED CHARACTERS expected on the cover: ${page.characters.join(', ')} (others may appear too).` : '',
       facts.length && `STORY FACTS (where everyone and everything is at this point of the story; the picture may not contradict them):\n${facts.join('\n')}`,
       !isCover && book.storyline.obstacle && `THE PROBLEM THE STORY DEPENDS ON: ${book.storyline.obstacle}`,
@@ -898,8 +1107,8 @@ export function createBooks(deps) {
     const key = page.kind === 'page' ? placeKey(page.setting) : '';
     const samePlace = key ? nearest(story.filter((p) => goodPicture(p) && placeKey(p.setting) === key)) : null;
     const pinned = others.find((p) => p.id === book.anchorPageId);
-    const noLeak = 'Who is in this picture, where they are and what they do comes only from the scene described above: never carry over a character, an object, a pose, the framing or any lettering because the reference shows it.';
-    if (samePlace) out.push({ recId: samePlace.imageId, label: `same place: ${label(samePlace)}`, text: `${label(samePlace)} of this same book, set in the same place. Match its rendering style, and keep the place as it is drawn there: its landmarks, objects, colours and light. ${noLeak}` });
+    const noLeak = 'Who is in this picture, where they are and what they do comes only from the scene described above: never carry over a character, an object, a pose, the framing or any lettering because the reference shows it. Do NOT reuse its camera angle, its distance, the left-to-right order of the characters or its background layout: this page has its own camera set-up, given above, and must look clearly different from it at a glance.';
+    if (samePlace) out.push({ recId: samePlace.imageId, label: `same place: ${label(samePlace)}`, text: `${label(samePlace)} of this same book, set in the same place. Match its rendering style, and keep the place as it is drawn there: the look of its landmarks and objects (seen now from this page's own camera). ${noLeak}` });
     if (pinned && pinned !== samePlace) out.push({ recId: pinned.imageId, label: `style anchor: ${label(pinned)}`, text: `${label(pinned)} of this same book, as a style reference only. Match its rendering, line, palette and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
     if (!samePlace && !pinned) {
       const near = nearest(story.filter(goodPicture)) || nearest(others.filter(goodPicture));
@@ -1034,6 +1243,8 @@ Constraints:
           for (const [k, max] of [['beat', 1000], ['text', 4000], ['illustration', 2000], ...PAGE_META]) if (k in patch) p[k] = clampStr(patch[k], max);
           if ('arc' in patch) p.arc = ARC_IDS.includes(patch.arc) ? patch.arc : '';
           if ('shot' in patch) p.shot = SHOT_IDS.includes(patch.shot) ? patch.shot : '';
+          // A design edited by hand is the author's: its layout is kept by later "Design pages" runs and by the Flash Cards mirror.
+          if ('design' in patch && p.kind === 'page') p.design = patch.design ? cleanDesign(patch.design, 'author', clampStr) : null;
           if ('imagePrompt' in patch) { p.imagePrompt = clampStr(patch.imagePrompt, 8000); if (!p.imagePrompt) p.promptAuto = ''; }
           if (Array.isArray(patch.characters)) p.characters = patch.characters.map((n) => clampStr(n, 80)).filter((n) => b.cast.some((c) => c.name === n));
           if (PLACEMENTS.includes(patch.textPlacement)) p.textPlacement = patch.textPlacement;
@@ -1147,6 +1358,7 @@ Constraints:
     else if (req.method === 'POST' && a === 'scripts') { const body = await readJson(req); await getBook(id); await streamed(res, url, async (progress) => pub(await handleScripts(id, body, progress))); }
     else if (req.method === 'POST' && a === 'details') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleDetails(id, progress))); }
     else if (req.method === 'POST' && a === 'undo') send(res, 200, pub(await handleUndo(id)));
+    else if (req.method === 'POST' && a === 'design') { const body = await readJson(req).catch(() => ({})); await getBook(id); await streamed(res, url, async (progress) => pub(await handleDesign(id, body, progress))); }
     else if (req.method === 'POST' && a === 'prompts') send(res, 200, pub(await handlePrompts(id, await readJson(req))));
     else if (req.method === 'POST' && a === 'edit') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleEdit(id, progress))); }
     else if (req.method === 'POST' && a === 'world-sheet') send(res, 200, pub(await handleWorldSheet(id)));
@@ -1166,5 +1378,5 @@ Constraints:
     return true;
   }
 
-  return { route, config: () => ({ model: BOOK_MODEL, ageBands: AGE_BANDS.map(({ id, label, words }) => ({ id, label, words })), placements: PLACEMENTS, maxPages: MAX_PAGES, arcStages: ARC_STAGES, shots: SHOTS, storyline: STORYLINE_FIELDS.map(([id, label]) => ({ id, label })) }) };
+  return { route, config: () => ({ model: BOOK_MODEL, ageBands: AGE_BANDS.map(({ id, label, words }) => ({ id, label, words })), placements: PLACEMENTS, maxPages: MAX_PAGES, pageStep: PAGE_STEP, arcStages: ARC_STAGES, shots: SHOTS, pageStyles: PAGE_STYLES, layouts: LAYOUTS.map(({ id, label, panels, when }) => ({ id, label, panels, when })), playKinds: PLAY_KINDS, storyline: STORYLINE_FIELDS.map(([id, label]) => ({ id, label })) }) };
 }

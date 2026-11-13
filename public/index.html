@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="topbar">
-    <nav class="nav"><a class="brand" href="/">Dadventures</a><a class="on" href="/">Images</a><a href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a class="on" href="/">Images</a><a href="/characters.html">Characters</a><a href="/groups.html">Groups</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
     <div class="topbar-meta" id="topbar-meta">Loading…</div>
   </header>
 
@@ -59,6 +59,7 @@
           <label class="field"><span>Reference images</span><input id="char-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
         </div>
         <div class="ref-grid" id="char-refs"></div>
+        <div class="hint" id="char-describe-instead" hidden>No pictures yet? <a href="/characters.html?character=new">Describe the character instead</a> and the studio draws their master picture, turnaround sheet and character bible.</div>
         <div class="hint">Best references: a clean front or three-quarter view, face visible, plain background, no text. One good identity image plus a reference sheet beats many busy scenes. The first image is the primary anchor.</div>
         <div class="actions">
           <button class="btn secondary small" id="char-describe" type="button" title="Use a vision model to fill the identity fields from the reference images">✨ Auto-describe from references</button>
@@ -71,6 +72,16 @@
           <label class="field"><span>Art style</span><input id="char-style" type="text" placeholder="flat vector cartoon, soft gradients"></label>
           <label class="field"><span>Personality / tone</span><input id="char-personality" type="text" placeholder="cheerful, curious, gentle"></label>
         </div>
+        <details class="char-story">
+          <summary>Story notes <span class="hint">(loves, worries, how they talk… — used when writing stories, not sent to the image model)</span></summary>
+          <div class="grid2">
+            <label class="field"><span>Loves</span><input id="char-loves" type="text" maxlength="300"></label>
+            <label class="field"><span>Worries</span><input id="char-worries" type="text" maxlength="300"></label>
+            <label class="field"><span>How they talk</span><input id="char-voice" type="text" maxlength="300"></label>
+            <label class="field"><span>Habits &amp; quirks</span><input id="char-quirks" type="text" maxlength="300"></label>
+          </div>
+          <label class="field"><span>Home &amp; friends</span><input id="char-world" type="text" maxlength="600"></label>
+        </details>
         <div class="actions">
           <button class="btn primary small" id="char-save" type="button">Save character</button>
           <button class="btn secondary small" id="char-cancel" type="button">Close</button>

@@ -571,6 +571,7 @@ function renderCharacters() {
 }
 async function loadCharacters() { characters = await api('GET', '/api/characters'); renderCharacters(); }
 
+const STORY_NOTE_FIELDS = ['loves', 'worries', 'voice', 'quirks', 'world'];
 function openCharEditor(c) {
   editingChar = c || 'new';
   pendingUploads = [];
@@ -581,9 +582,12 @@ function openCharEditor(c) {
   els.charPalette.value = c ? c.palette || '' : '';
   els.charStyle.value = c ? c.style || '' : '';
   els.charPersonality.value = c ? c.personality || '' : '';
+  for (const k of STORY_NOTE_FIELDS) document.getElementById(`char-${k}`).value = c ? c[k] || '' : '';
+  document.querySelector('.char-story').open = !!c && STORY_NOTE_FIELDS.some((k) => c[k]);
   els.charFiles.value = '';
   els.charDelete.hidden = !c;
   els.charSheet.hidden = !c || !c.refs.length;
+  document.getElementById('char-describe-instead').hidden = !!c;
   els.charSave.textContent = c ? 'Save changes' : 'Save character';
   els.charStatus.textContent = '';
   renderCharRefs();
@@ -628,7 +632,7 @@ function renderCharRefs() {
   }
 }
 function charFields() {
-  return { description: els.charDesc.value, outfit: els.charOutfit.value, palette: els.charPalette.value, style: els.charStyle.value, personality: els.charPersonality.value };
+  return { description: els.charDesc.value, outfit: els.charOutfit.value, palette: els.charPalette.value, style: els.charStyle.value, personality: els.charPersonality.value, ...Object.fromEntries(STORY_NOTE_FIELDS.map((k) => [k, document.getElementById(`char-${k}`).value])) };
 }
 async function describeCharacter() {
   els.charDescribe.disabled = true;
@@ -802,7 +806,7 @@ async function init() {
   els.filterFav.addEventListener('click', () => { view.fav = !view.fav; renderGallery(); });
   els.viewTrash.addEventListener('click', () => { view.trash = !view.trash; renderGallery(); });
   document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !els.generate.disabled && !['edit-notes', 'edit-title', 'edit-tags', 'char-name', 'char-desc', 'char-outfit', 'char-palette', 'char-style', 'char-personality'].includes(document.activeElement?.id)) { e.preventDefault(); generate(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !els.generate.disabled && !['edit-notes', 'edit-title', 'edit-tags', 'char-name', 'char-desc', 'char-outfit', 'char-palette', 'char-style', 'char-personality', 'char-loves', 'char-worries', 'char-voice', 'char-quirks', 'char-world'].includes(document.activeElement?.id)) { e.preventDefault(); generate(); }
   });
   await Promise.all([loadHistory(), loadLibrary(), loadCharacters()]);
   const fromLink = urlState.any();

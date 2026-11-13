@@ -11,7 +11,7 @@
 </head>
 <body class="characters">
   <header class="topbar">
-    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a class="on" href="/characters.html">Characters</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a class="on" href="/characters.html">Characters</a><a href="/groups.html">Groups</a><a href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
     <div class="topbar-meta" id="topbar-meta">Loading…</div>
   </header>
 
@@ -22,7 +22,8 @@
         <h2 class="gallery-title">Our characters <span class="hint" id="cast-count"></span></h2>
         <span class="spacer"></span>
         <input id="search" type="search" placeholder="Search by name, look or personality…">
-        <a class="btn primary small" href="/?character=new">+ New character</a>
+        <a class="btn secondary small" href="/groups.html" title="Families, friends and classmates: crews who share a universe of stories">👥 Groups</a>
+        <a class="btn primary small" id="new-btn" href="/characters.html?character=new">+ New character</a>
       </div>
       <div class="cast" id="cast"></div>
       <div class="empty" id="cast-empty" hidden></div>
@@ -48,9 +49,52 @@
         <div class="empty small" id="pictures-empty" hidden></div>
       </div>
     </section>
+    <!-- A new character, from a description -->
+    <section id="new-view" hidden>
+      <div class="toolbar">
+        <button class="btn secondary small" id="new-back" type="button">← All characters</button>
+      </div>
+      <div class="panel new-char">
+        <h1>New character</h1>
+        <p class="hint">Describe an animal, a creature or anyone made up, and give them a personality. The studio designs the look, draws a master picture, a clean turnaround sheet (sent with every picture they appear in) and a full character bible. You can then use them on the Images page, in Story Books and in Flash Cards.</p>
+        <div class="ai-box">
+          <div class="prompt-title"><span>✨ Start with a quick briefing <span class="hint">— the AI fills in everything below for you to check</span></span></div>
+          <textarea id="new-ask" rows="2" maxlength="2000" placeholder="e.g. A shy little dragon who loves making pancakes and is scared of thunder — for my 3-year-old, soft watercolour look."></textarea>
+          <div class="ai-row">
+            <button class="btn primary small" id="new-enhance" type="button" title="Fills in the name, look, art style, personality and story notes from your briefing, keeping anything you already wrote. Costs a fraction of a cent; nothing is drawn yet.">✨ Fill in the rest</button>
+            <button class="btn secondary small" id="new-undo" type="button" hidden>↶ Undo</button>
+            <span class="hint">Run it again with a new briefing to change things (“make her braver”, “he lives in the sea”). Nothing is drawn until you create the sheet.</span>
+          </div>
+        </div>
+
+        <label class="field"><span>Name</span><input id="new-name" type="text" maxlength="80" placeholder="e.g. Pip the pancake dragon"></label>
+        <label class="field"><span>What they are and how they look <span class="hint">(or leave it to the briefing above)</span></span><textarea id="new-brief" rows="4" maxlength="2000" placeholder="A small, round purple dragon about the size of a cat, with stubby wings that are too small to fly, a cream belly and freckles on his snout."></textarea></label>
+        <label class="field"><span>Art style <span class="hint">(optional)</span></span><input id="new-style" type="text" maxlength="300" placeholder="soft watercolour picture-book illustration"></label>
+
+        <div class="new-story">
+          <div class="prompt-title"><span>Personality &amp; story <span class="hint">— carried into every story, card and book they appear in</span></span></div>
+          <div class="grid2">
+            <label class="field"><span>Personality</span><input id="new-personality" data-note type="text" maxlength="300" placeholder="shy, kind, a little clumsy, very curious"></label>
+            <label class="field"><span>Loves</span><input id="new-loves" data-note type="text" maxlength="300" placeholder="making pancakes, rainy days, his blue blanket"></label>
+            <label class="field"><span>Worries</span><input id="new-worries" data-note type="text" maxlength="300" placeholder="loud thunder, being left out of games"></label>
+            <label class="field"><span>How they talk</span><input id="new-voice" data-note type="text" maxlength="300" placeholder="soft and slow; says “Oh, crumbs!” when surprised"></label>
+            <label class="field"><span>Habits &amp; quirks</span><input id="new-quirks" data-note type="text" maxlength="300" placeholder="hums while cooking, hides behind his wings when shy"></label>
+            <label class="field"><span>Home &amp; friends</span><input id="new-world" data-note type="text" maxlength="600" placeholder="a cosy cave by Maple Pond, best friends with a frog called Lulu"></label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary small" id="new-create" type="button">✨ Create character sheet</button>
+          <a class="btn secondary small" href="/?character=new">Or start from your own pictures</a>
+        </div>
+        <div class="hint">Three paid pictures and a short text step: about 2–4 minutes, ≈ $0.30–0.50.</div>
+        <div class="status" id="new-status"></div>
+      </div>
+    </section>
   </main>
 
   <script src="/url-state.js"></script>
   <script src="/characters.js"></script>
+
 </body>
 </html>

@@ -11,7 +11,7 @@
 </head>
 <body class="books">
   <header class="topbar">
-    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a class="on" href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
+    <nav class="nav"><a class="brand" href="/">Dadventures</a><a href="/">Images</a><a href="/characters.html">Characters</a><a href="/groups.html">Groups</a><a class="on" href="/books.html">Story Books</a><a href="/cards.html">Flash Cards</a><a href="/sheets.html">Print Sheets</a><a href="/costs.html">Costs</a></nav>
     <div class="topbar-meta" id="topbar-meta">Loading…</div>
   </header>
 
@@ -21,6 +21,17 @@
       <div class="shelf-head">
         <div><h1>Story Books</h1><p class="hint" id="shelf-meta"></p></div>
         <button id="new-book" class="btn primary" type="button">+ New book</button>
+      </div>
+      <div class="shelf-tools">
+        <label class="shelf-pick"><span>Sort</span><select id="shelf-sort">
+          <option value="progress">In progress first</option>
+          <option value="updated">Recently edited</option>
+          <option value="created">Newest first</option>
+          <option value="created-asc">Oldest first</option>
+          <option value="title">Title A–Z</option>
+          <option value="character">By character</option>
+        </select></label>
+        <label class="shelf-pick"><span>Character</span><select id="shelf-char"><option value="">Everyone</option></select></label>
       </div>
       <div class="shelf-grid" id="shelf-grid"></div>
     </section>
@@ -45,9 +56,11 @@
         <div class="bk-actions">
           <button class="btn secondary" id="read-toggle" type="button">📖 Read</button>
           <a class="btn secondary" id="export-md" download>⬇ Manuscript</a>
+          <button class="btn secondary" id="to-sheets" type="button" title="Lay the book out in Print Sheets, double-sided: the cover on its own, then pages 1 and 2 back to back, 3 and 4, and so on">🖨 Print Sheets</button>
         </div>
       </div>
       <div class="note-warn" id="from-series" hidden></div>
+      <div class="note-warn" id="page-warn" hidden></div>
 
       <div class="panel results">
         <div class="flow" id="flow">
@@ -95,7 +108,7 @@
             <div class="ideas" id="ideas" hidden></div>
             <div class="grid2">
               <label class="field"><span>Audience</span><select id="audience"></select></label>
-              <label class="field"><span>Story pages</span><input id="page-count" type="number" min="4" max="32" value="12"></label>
+              <label class="field"><span>Story pages <span class="hint">(3, 7, 11, 15… — with the cover that fills every back)</span></span><input id="page-count" type="number" min="3" max="31" step="4" value="11"></label>
               <label class="field"><span>Tone</span><input id="tone" type="text" placeholder="cozy, funny, bedtime"></label>
               <label class="field"><span>Theme / lesson</span><input id="theme-brief" type="text" placeholder="courage, friendship"></label>
             </div>
@@ -118,6 +131,7 @@
               <label class="field"><span>Quality</span><select id="img-quality"></select></label>
               <label class="field"><span>Page size</span><select id="img-size"></select></label>
             </div>
+            <label class="field"><span>Page style <span class="hint" id="page-style-hint"></span></span><select id="page-style" title="Classic: one picture and the story text per page. The designed styles give each page a layout of 1–4 panels with tiny captions, plus play, fact and grown-ups boxes; the full story text stays for reading aloud."></select></label>
             <label class="field check"><span>Text</span><label><input type="checkbox" id="text-in-image"> Draw the text into the picture</label></label>
             <label class="field check"><span>Proofread</span><label title="A second reader checks every new picture against its page (who is in it, where the story says everyone is, stray lettering) and redraws it once if it is wrong. A redraw is a second paid picture."><input type="checkbox" id="proof" checked> Check each picture and redraw once if it is wrong</label></label>
             <label class="field check"><span>Consistency</span><label title="Each new picture is drawn with pictures beside it: the world sheet if the book has one, and the nearest finished page set in the same place (or, failing that, the nearest finished page for its style). Costs a little more per picture for the extra image input."><input type="checkbox" id="refs" checked> Show the illustrator earlier pages and the world sheet</label></label>

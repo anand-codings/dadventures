@@ -31,6 +31,7 @@ const view = { sheet: 0, side: 'front' };   // the one page the preview shows
 const SPACING = {
   laminate: { margin: 0.25, gutter: 0.5, note: 'A ½ in gap, so every piece keeps a sealed edge after cutting.' },
   cut: { margin: 0.375, gutter: 0, note: 'No gap, so each cut line is shared. The ⅜ in margin lets the crop marks at the page edges print.' },
+  bleed: { margin: 0, gutter: 0, note: 'No margin and no gap: the pieces fill the whole sheet. Print borderless (at a shop, ask for full bleed); an ordinary printer leaves a thin white strip at the paper edge.' },
   custom: { note: 'Laminating: keep the gap at ¼–½ in. Cutting only: a gap of 0 and a margin of ⅜ in.' },
 };
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

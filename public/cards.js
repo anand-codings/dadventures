@@ -12,7 +12,7 @@ const els = {
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
   viewLibrary: $('view-library'), groups: $('groups'), detail: $('detail'), library: $('library'), viewTemplates: $('view-templates'), viewSeries: $('view-series'),
   seriesEmpty: $('series-empty'), series: $('series'), title: $('title'), logline: $('logline'), styleGuide: $('style-guide'), storyBox: $('story-box'), spine: $('spine'), refrain: $('refrain'), hiddenFriend: $('hidden-friend'), script: $('script'), planInstructions: $('plan-instructions'), replan: $('replan'),
-  addCast: $('add-cast'), cast: $('cast'), cardsMeta: $('cards-meta'), cards: $('cards'), addCard: $('add-card'),
+  addCast: $('add-cast'), cast: $('cast'), cardsMeta: $('cards-meta'), cards: $('cards'), addCard: $('add-card'), cardsWarn: $('cards-warn'), cardCountLabel: $('card-count-label'),
   basedOn: $('based-on'), basedOnField: $('based-on-field'), redrawStale: $('redraw-stale'), viewToggle: $('view-toggle'), board: $('board'), boardGrid: $('board-grid'), boardFoot: $('board-foot'),
   continuity: $('continuity'), checkBook: $('check-book'), makeBacks: $('make-backs'),
 };
@@ -376,7 +376,7 @@ const kind = () => document.querySelector('input[name=kind]:checked').value;
 const currentTemplate = () => templates.find((t) => t.id === (series?.brief.templateId || els.template.value));
 const audience = () => config.cards.audiences.find((a) => a.id === (series?.brief.audience || els.audience.value)) || config.cards.audiences[0];
 const readBrief = () => ({ kind: kind(), templateId: els.template.value, styleTemplateId: els.styleTemplate.value, premise: els.premise.value, topics: els.topics.value, lesson: els.lesson.value, audience: els.audience.value,
-  cardCount: Number(els.cardCount.value) || 6, tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars], basedOn: els.basedOn.value });
+  cardCount: countFor(kind(), els.cardCount.value), tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars], basedOn: els.basedOn.value });
 const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, autoFix: els.autoFix.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
 function writeBrief() {
   const b = series?.brief, im = series?.image;
@@ -413,15 +413,42 @@ els.basedOn.addEventListener('change', async () => {
   } catch (e) { setStatus(escapeHtml(e.message), 'error'); }
 });
 function ensureSize(size) { if (![...els.imgSize.options].some((o) => o.value === size)) { const o = document.createElement('option'); o.value = size; o.textContent = size.replace('x', ' × '); els.imgSize.appendChild(o); } els.imgSize.value = size; }
+// A story series is also a Story Book whose cover backs card 1, so cover + cards come in fours (3, 7, 11, 15 … cards);
+// it then prints double-sided with every back filled.
+const STORY_STEP = 4;
+const countFor = (k, v) => { const n = Math.min(40, Math.max(1, Math.floor(Number(v) || 6))); return k === 'story' ? Math.min(39, Math.max(STORY_STEP - 1, Math.ceil((n + 1) / STORY_STEP) * STORY_STEP - 1)) : n; };
+function syncCountField() {
+  const story = kind() === 'story';
+  els.cardCount.step = story ? STORY_STEP : 1; els.cardCount.min = story ? STORY_STEP - 1 : 1; els.cardCount.max = story ? 39 : 40;
+  els.cardCountLabel.textContent = story ? 'Cards (3, 7, 11, 15… — with the cover the book prints back to back)' : 'Cards';
+  if (series?.cards.length) return;   // already planned: the cards list itself says if it is off by a few
+  const v = countFor(kind(), els.cardCount.value);
+  if (Number(els.cardCount.value) !== v) { els.cardCount.value = v; if (series) { series.brief.cardCount = v; queue({ brief: { cardCount: v } }); } }
+}
 function kindChanged() {
+  syncCountField();
+  if (!series) onTemplateChosen();
   els.premiseLabel.textContent = kind() === 'story' ? 'What is the story?' : 'What is the series about?';
   els.premise.placeholder = kind() === 'story' ? 'Pip the puffin loses her way in the fog and learns how birds navigate home.' : 'Animals that live in tide pools.';
   els.basedOnField.hidden = kind() !== 'story' && !els.basedOn.value;
 }
-function onTemplateChosen() { const t = templates.find((x) => x.id === els.template.value); if (t && !series) ensureSize(t.size || '1024x1536'); artSummary(); }
+// A new story is drawn in the quarter-Letter shape (four cards fill an 8.5 × 11 sheet edge to edge); a topic set takes its template's shape.
+const STORY_SIZE = '1088x1408';
+function onTemplateChosen() { const t = templates.find((x) => x.id === els.template.value); if (!series) { if (kind() === 'story') ensureSize(STORY_SIZE); else if (t) ensureSize(t.size || '1024x1536'); } artSummary(); }
 function artSummary() { const est = estimateImageCost(els.imgModel.value, els.imgSize.value, els.imgQuality.value); els.artSummary.textContent = `${els.imgSize.value.replace('x', '×')} · ${els.imgQuality.value}${est ? ` · ≈ ${fmtCost(est)} per card` : ''}`; }
+// Character groups (Groups page): one chip picks the whole crew; the writer then gets the group's notes.
+let charGroups = null;
 function renderBriefChars() {
+  if (!charGroups) { charGroups = []; api('GET', '/api/groups').then((d) => { charGroups = d.groups.filter((g) => g.characterIds.length > 1); if (charGroups.length) renderBriefChars(); }).catch(() => {}); }
   els.briefChars.innerHTML = characters.length ? '' : '<span class="hint">None yet. Create characters on the Images page.</span>';
+  for (const g of charGroups) {
+    const ids = g.characterIds.filter((id) => characters.some((c) => c.id === id)), all = ids.length && ids.every((id) => briefChars.has(id));
+    const chip = document.createElement('span'); chip.className = 'char-chip group' + (all ? ' on' : '');
+    chip.title = `${g.name}: ${ids.map((id) => characters.find((c) => c.id === id).name).join(', ')}. Picks the whole group; their relationships and running storylines go to the writer.`;
+    chip.textContent = `👥 ${g.name}`;
+    chip.onclick = () => { for (const id of ids) all ? briefChars.delete(id) : briefChars.size < 8 && briefChars.add(id); renderBriefChars(); if (series) queue({ brief: { characterIds: [...briefChars] } }); };
+    els.briefChars.appendChild(chip);
+  }
   for (const c of characters) {
     const chip = document.createElement('span'); chip.className = 'char-chip' + (briefChars.has(c.id) ? ' on' : '');
     chip.innerHTML = `${c.refs[0] ? `<img src="${escapeHtml(c.refs[0].thumbUrl)}" alt="">` : ''}${escapeHtml(c.name)}`;
@@ -430,11 +457,12 @@ function renderBriefChars() {
   }
 }
 // Each control saves only its own field, so form state can never overwrite the rest of a stored brief.
+els.cardCount.addEventListener('change', () => { const v = countFor(kind(), els.cardCount.value); if (Number(els.cardCount.value) !== v) els.cardCount.value = v; });
 for (const [el, k] of [[els.premise, 'premise'], [els.topics, 'topics'], [els.lesson, 'lesson'], [els.tone, 'tone'], [els.notes, 'notes'], [els.cardCount, 'cardCount'], [els.audience, 'audience'], [els.template, 'templateId'], [els.styleTemplate, 'styleTemplateId']]) {
   el.addEventListener('input', () => {
     if (el === els.template) onTemplateChosen();
     if (!series) return;
-    series.brief[k] = k === 'cardCount' ? Number(el.value) || series.brief.cardCount : el.value;
+    series.brief[k] = k === 'cardCount' ? countFor(series.brief.kind, el.value) : el.value;
     queue({ brief: { [k]: series.brief[k] } });
     if (el === els.template || el === els.audience) renderCards();
   });
@@ -657,9 +685,14 @@ async function sendToSheets() {
   const order = [[series.cover?.imageId, 'cover']]; let ch = '';
   for (const c of series.cards) { if (c.chapter && c.chapter !== ch) { ch = c.chapter; order.push([series.chapterCards?.[ch], null]); } order.push([c.imageId, c.id]); }
   const backOf = (key) => (key && series.backs?.[key] ? { source: 'output', rel: series.backs[key].rel } : null);
-  const items = order.filter(([id]) => id).map(([id, key]) => [upscaledOf(id) || records.get(id), key]).filter(([r]) => r && !r.deletedAt).map(([r, key]) => ({ source: 'output', rel: r.file, copies: 1, back: backOf(key) }));
+  const pieces = order.filter(([id]) => id).map(([id, key]) => [upscaledOf(id) || records.get(id), key]).filter(([r]) => r && !r.deletedAt);
+  const items = pieces.map(([r, key]) => ({ source: 'output', rel: r.file, copies: 1, back: backOf(key) }));
+  // Cards drawn in the quarter-Letter shape (4.25 × 5.5 in, 17:22) go four to a Letter sheet with no margin and no gap; any other shape keeps the Tabloid sheet with gaps.
+  const quarter = pieces.every(([r]) => r.width && r.height && Math.abs(Math.min(r.width, r.height) / Math.max(r.width, r.height) - 17 / 22) < 0.01);
+  const landscape = quarter && pieces[0][0].width > pieces[0][0].height;
+  const paper = quarter ? { page: 'letter', orientation: landscape ? 'landscape' : 'portrait', margin: 0, gutter: 0, fit: 'cover', backFit: 'cover', cutMarks: false, pack: false } : { page: 'tabloid', orientation: 'portrait' };
   if (!items.length) return setStatus('Illustrate at least one card first.', 'error');
-  const spec = { ...config.sheets.defaults, orientation: 'portrait', grid: '2x2', items };   // the print defaults: Letter, double-sided, whole image, full resolution
+  const spec = { ...config.sheets.defaults, ...paper, grid: '2x2', items, ...(items.some((x) => x.back) ? { duplex: true, flip: 'long' } : {}) };
   try {
     const sheet = await api('POST', '/api/sheets', { name: series.title || 'Flash cards', spec });
     localStorage.setItem('dadventures.sheetDraft', JSON.stringify({ sheetId: sheet.id, name: sheet.name, spec: sheet.spec }));
@@ -855,6 +888,9 @@ els.addCast.addEventListener('click', () => { series.cast.push({ id: '', name: '
 function renderCards() {
   if (!series) return;
   const t = currentTemplate(), limit = audience().panelWords || 999;
+  const n = series.cards.length, over = series.brief.kind === 'story' && n ? (n + 1) % STORY_STEP : 0;
+  els.cardsWarn.hidden = !over;
+  els.cardsWarn.textContent = over ? `This story has ${n} cards plus the cover. The cover and cards print in fours (3, 7, 11, 15 … cards) so every back is filled: add ${STORY_STEP - over} card${STORY_STEP - over === 1 ? '' : 's'}${n > over ? ` or remove ${over}` : ''}.` : '';
   els.cardsMeta.textContent = t ? `template: ${t.name}${audience().panelWords ? ` · up to ${limit} words per panel for ages ${audience().id}` : ''}` : 'The template for this series is missing — choose one on the left.';
   els.cards.innerHTML = series.cards.map((c) => {
     const rec = records.get(c.imageId);
@@ -998,7 +1034,7 @@ document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.
     fillSelect(els.audience, config.cards.audiences, 'template');
     fillSelect(els.imgModel, config.imageModels, config.defaultImageModel);
     fillSelect(els.imgQuality, config.qualities, 'high');
-    fillSelect(els.imgSize, [{ id: '1024x1536', label: '1024 × 1536 — 2:3 portrait (upscale ×4 for print)' }, { id: '2048x3072', label: '2048 × 3072 — 2:3 portrait, 2K' }, { id: '1536x1024', label: '1536 × 1024 — 3:2 landscape' }, { id: '1024x1024', label: '1024 × 1024 — square' }], '1024x1536');
+    fillSelect(els.imgSize, [{ id: '1088x1408', label: '1088 × 1408 — quarter Letter: 4 fill an 8.5 × 11 sheet (upscale ×4 for print)' }, { id: '2176x2816', label: '2176 × 2816 — quarter Letter, 2K' }, { id: '1024x1536', label: '1024 × 1536 — 2:3 portrait (upscale ×4 for print)' }, { id: '2048x3072', label: '2048 × 3072 — 2:3 portrait, 2K' }, { id: '1536x1024', label: '1536 × 1024 — 3:2 landscape' }, { id: '1024x1024', label: '1024 × 1024 — square' }], '1024x1536');
     const [chars, history] = await Promise.all([api('GET', '/api/characters'), api('GET', '/api/history'), loadLibrary()]);
     characters = chars; for (const r of history) records.set(r.id, r);
     await Promise.all([loadTemplates(), loadSeriesList()]);
