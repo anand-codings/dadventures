@@ -20,6 +20,8 @@ The sheet's name is the page title (click it to rename), and **Build PDF** sits 
     *Cut only* sets a gap of 0 and a ⅜ in margin, so each cut line is shared and the crop marks at the page edges print.
     Typing your own **margin** or **gap** switches to *Custom*.
   - **Options**: **crop marks** in the gaps and at the page edges on every cut line, and **double-sided**.
+  - **Defaults are set for the best print**: double-sided on, whole image (no cropping), full resolution and lossless PNG.
+    Switch to JPEG or a DPI cap under *More options* if the PDF is too big for the print shop's upload limit.
   - **More options**: fit mode (keep the whole image, or fill the cell and crop), image detail, file size,
     **pack edge to edge** (cells take the pieces' own shape and the block is centred, so with a 0 gap every cut line is
     shared: one guillotine pass per line, no scrap strips), a **hairline border**, and a **sheet-name label** in the bottom margin.

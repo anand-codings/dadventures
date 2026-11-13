@@ -138,8 +138,8 @@ export function createSheets(deps) {
       cols: Math.floor(num(s.cols, 1, 12, 2)), rows: Math.floor(num(s.rows, 1, 12, 2)),
       fit: s.fit === 'cover' ? 'cover' : 'contain',
       cutMarks: s.cutMarks !== false, outline: Boolean(s.outline), label: Boolean(s.label),
-      maxDpi: Math.floor(num(s.maxDpi, 72, 1200, 400)),
-      encode: s.encode === 'png' ? 'png' : 'jpeg',
+      maxDpi: Math.floor(num(s.maxDpi, 72, 1200, DEFAULT_SPEC.maxDpi)),
+      encode: s.encode === 'jpeg' ? 'jpeg' : 'png',
       duplex: Boolean(s.duplex), flip: s.flip === 'short' ? 'short' : 'long', backFit: s.backFit === 'cover' ? 'cover' : 'contain', pack: Boolean(s.pack),
       items: [],
     };

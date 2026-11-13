@@ -35,9 +35,9 @@ export const DEFAULT_SPEC = {
   fit: 'contain',    // 'contain' keeps the whole image (cell may letterbox); 'cover' fills the cell and crops
   cutMarks: true,    // crop marks in the gutter at every image corner
   outline: false,    // hairline around each image (easy scissors guide; shows on the print)
-  maxDpi: 400,       // images are downscaled to at most this before embedding (file size); 300 is print quality
-  encode: 'jpeg',    // 'jpeg' (quality 92, small files) or 'png' (lossless, very large files)
-  duplex: false,     // double-sided: every front page gets a mirrored back page
+  maxDpi: 1200,      // images are downscaled to at most this before embedding; 1200 keeps full resolution (best print), 300 is the minimum print quality
+  encode: 'png',     // 'png' (lossless, best print, very large files) or 'jpeg' (quality 92, small files)
+  duplex: true,      // double-sided: every front page gets a mirrored back page
   backFit: 'contain', // a back with a different shape than its front: 'contain' (whole image, white bars) or 'cover' (fill, crop)
   pack: false,       // size the cells to the images' own shape and centre the block, so rows and columns touch when the gap is 0
   flip: 'long',      // how the printer turns the sheet: 'long' edge (book-style, the FedEx default) or 'short' edge

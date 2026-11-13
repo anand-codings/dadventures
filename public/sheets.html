@@ -102,7 +102,7 @@
         <div class="ws-group">
           <div class="ws-label">Options</div>
           <label class="ws-toggle"><span><b>Crop marks</b><small>In the gaps and at the page edges, on every cut line</small></span><input type="checkbox" id="cut-marks" checked></label>
-          <label class="ws-toggle"><span><b>Double-sided</b><small>A front and a back for each piece</small></span><input type="checkbox" id="duplex"></label>
+          <label class="ws-toggle"><span><b>Double-sided</b><small>A front and a back for each piece</small></span><input type="checkbox" id="duplex" checked></label>
           <div class="ws-reveal" id="duplex-options" hidden>
             <div class="field"><span>Printer flips the sheet on the</span>
               <div class="ws-seg" data-for="flip"><button type="button" data-v="long">Long edge</button><button type="button" data-v="short">Short edge</button></div>
@@ -114,8 +114,8 @@
           <details class="ws-more" id="more">
             <summary><span><b>More options</b><small id="more-note"></small></span></summary>
             <label class="field"><span>Fit</span><select id="fit"><option value="contain">Whole image (no cropping)</option><option value="cover">Fill the cell (crop edges)</option></select></label>
-            <label class="field"><span>Image detail</span><select id="max-dpi"><option value="300">300 DPI (print quality)</option><option value="400" selected>400 DPI</option><option value="600">600 DPI (large file)</option><option value="1200">Full resolution</option></select></label>
-            <label class="field"><span>File size</span><select id="encode"><option value="jpeg" selected>Smaller file: JPEG at quality 92</option><option value="png">Lossless PNG: about 10× larger</option></select></label>
+            <label class="field"><span>Image detail</span><select id="max-dpi"><option value="300">300 DPI (print quality)</option><option value="400">400 DPI</option><option value="600">600 DPI (large file)</option><option value="1200" selected>Full resolution (best print)</option></select></label>
+            <label class="field"><span>File size</span><select id="encode"><option value="png" selected>Lossless PNG (best print): about 10× larger</option><option value="jpeg">Smaller file: JPEG at quality 92</option></select></label>
             <label class="ws-toggle"><span><b>Pack edge to edge</b><small>Cells take the pieces' shape; with a 0 gap every cut line is shared</small></span><input type="checkbox" id="pack"></label>
             <label class="ws-toggle"><span><b>Hairline border</b><small>Around each picture; prints on the piece</small></span><input type="checkbox" id="outline"></label>
             <label class="ws-toggle"><span><b>Sheet name label</b><small>Printed in the bottom margin</small></span><input type="checkbox" id="label"></label>
