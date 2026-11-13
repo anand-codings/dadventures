@@ -55,7 +55,7 @@ function readForm() {
     customWidth: Number(els.customWidth.value) || 8.5, customHeight: Number(els.customHeight.value) || 11,
     grid: els.grid.value, cols: Number(els.cols.value) || 2, rows: Number(els.rows.value) || 2,
     margin: Number(els.margin.value) || 0, gutter: Number(els.gutter.value) || 0,
-    fit: els.fit.value, maxDpi: Number(els.maxDpi.value) || 400, encode: els.encode.value,
+    fit: els.fit.value, maxDpi: Number(els.maxDpi.value) || DEFAULT_SPEC.maxDpi, encode: els.encode.value,
     cutMarks: els.cutMarks.checked, pack: els.pack.checked, outline: els.outline.checked, label: els.label.checked,
     duplex: els.duplex.checked, flip: els.flip.value, backFit: els.backFit.value,
   };
@@ -70,8 +70,8 @@ function writeForm() {
   els.customWidth.value = spec.customWidth; els.customHeight.value = spec.customHeight;
   els.grid.value = spec.grid; els.cols.value = spec.cols; els.rows.value = spec.rows;
   els.margin.value = spec.margin; els.gutter.value = spec.gutter; els.fit.value = spec.fit;
-  els.maxDpi.value = [300, 400, 600, 1200].includes(spec.maxDpi) ? String(spec.maxDpi) : '400';
-  els.encode.value = spec.encode === 'png' ? 'png' : 'jpeg';
+  els.maxDpi.value = [300, 400, 600, 1200].includes(spec.maxDpi) ? String(spec.maxDpi) : String(DEFAULT_SPEC.maxDpi);
+  els.encode.value = spec.encode === 'jpeg' ? 'jpeg' : 'png';
   els.cutMarks.checked = spec.cutMarks; els.pack.checked = Boolean(spec.pack); els.outline.checked = spec.outline; els.label.checked = Boolean(spec.label);
   els.duplex.checked = Boolean(spec.duplex); els.flip.value = spec.flip === 'short' ? 'short' : 'long'; els.backFit.value = spec.backFit === 'cover' ? 'cover' : 'contain';
   readForm();

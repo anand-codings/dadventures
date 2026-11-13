@@ -29,7 +29,7 @@ into reusable templates and makes new cards, and whole series of them, in the sa
    Consistency comes from three things, each a checkbox under *Picture settings*: the template's reference card, the first
    finished card of the series (sent with every later card), and Studio characters linked to cast members. A small
    "Series · 3 of 8" badge keeps printed cards in order. **⬆ Upscale ×4 for print** runs Real-ESRGAN on the finished cards and
-   **Send to Print Sheets** opens a Tabloid 2 × 2 sheet with the series (upscaled copies when they exist).
+   **Send to Print Sheets** opens a Letter 8.5 × 11, 2 × 2, double-sided sheet with the series (upscaled copies when they exist).
 
 **Stories as one narrative.** For a Story the planner first writes a **story spine** (once upon a time / until one day /
 because of that / until finally / ever since): one want set up on card 1, each card caused by the one before, a low point,

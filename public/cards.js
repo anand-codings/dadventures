@@ -659,7 +659,7 @@ async function sendToSheets() {
   const backOf = (key) => (key && series.backs?.[key] ? { source: 'output', rel: series.backs[key].rel } : null);
   const items = order.filter(([id]) => id).map(([id, key]) => [upscaledOf(id) || records.get(id), key]).filter(([r]) => r && !r.deletedAt).map(([r, key]) => ({ source: 'output', rel: r.file, copies: 1, back: backOf(key) }));
   if (!items.length) return setStatus('Illustrate at least one card first.', 'error');
-  const spec = { ...config.sheets.defaults, page: 'tabloid', orientation: 'portrait', grid: '2x2', items, ...(items.some((x) => x.back) ? { duplex: true, flip: 'long' } : {}) };
+  const spec = { ...config.sheets.defaults, orientation: 'portrait', grid: '2x2', items };   // the print defaults: Letter, double-sided, whole image, full resolution
   try {
     const sheet = await api('POST', '/api/sheets', { name: series.title || 'Flash cards', spec });
     localStorage.setItem('dadventures.sheetDraft', JSON.stringify({ sheetId: sheet.id, name: sheet.name, spec: sheet.spec }));
