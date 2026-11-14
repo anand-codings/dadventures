@@ -66,7 +66,9 @@ html.dv-on body { padding-left: var(--side-w); min-height: 100vh;
 .dv-card small { color: var(--navy-muted); font: inherit; }
 
 .dv-main { min-width: 0; }
-.dv-head { margin: 20px 20px 0; padding: 14px 20px 14px 22px; display: flex; align-items: center; gap: 14px; background: var(--navy); color: var(--navy-text); border-left: 8px solid var(--sec); border-radius: 6px; }
+/* z-index: the drop-in animation leaves a transform, which makes the header its own stacking context;
+   without a z-index its menus (e.g. Print Sheets → Sheets) paint under later page content. */
+.dv-head { position: relative; z-index: 10; margin: 20px 20px 0; padding: 14px 20px 14px 22px; display: flex; align-items: center; gap: 14px; background: var(--navy); color: var(--navy-text); border-left: 8px solid var(--sec); border-radius: 6px; }
 .dv-mascot { flex: none; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--sec); background: var(--navy-2) center / cover no-repeat; display: grid; place-items: center; }
 .dv-mascot svg { width: 28px; height: 28px; fill: none; stroke: var(--sec); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .dv-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

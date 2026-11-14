@@ -36,8 +36,8 @@ body.sheets .ws .ws-panel { display: flex; flex-direction: column; gap: 12px; mi
 .ws-title h2 { flex: 1; margin: 0; font: 700 22px/1.1 var(--f-title, inherit); }
 .ws-scroll { overflow: auto; min-height: 0; scrollbar-width: thin; }
 .ws-label, .ws-pg > span { font: 11px/1.4 var(--f-label, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.ws-seg { display: flex; gap: 2px; padding: 3px; background: var(--panel-2); border-radius: 6px; }
-.ws-seg button { flex: 1; border: 0; background: none; padding: 6px 10px; border-radius: 4px; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.ws-seg { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--panel-2); border-radius: 6px; }
+.ws-seg button { flex: 1 1 auto; border: 0; background: none; padding: 6px 10px; border-radius: 4px; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ws-seg button:hover { color: var(--text); }
 .ws-seg button.on, .ws-chips button.on, .ws-tiles button.on { background: var(--ws-ink); color: var(--ws-paper); border-color: var(--ws-ink); }
 .ws button:focus-visible, .ws-toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
