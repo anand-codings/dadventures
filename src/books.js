@@ -182,6 +182,7 @@ Plan every page in full; these notes are what the writer and the illustrator wor
 - setting: the specific place plus time of day or weather. Use the same wording for pages in the same place.
 - emotion: the main character's feeling and the mood of the page, in a few words.
 - continuity: what carries over from earlier pages and must be visible here (an object being carried, a change to how a character looks, something found, built or broken, the light getting later). Empty string when nothing carries over.
+- Pictures must differ from page to page: never plan more than three pages in a row in the same place with the same characters visible. When the story has to stay somewhere longer, move within the place (another corner, another landmark, named in the setting) or change who is visible on the page, and spend the pages saved on the places that come next.
 - shot: how close the picture is: ${SHOTS.map((x) => `${x.id} (${x.hint})`).join(', ')}. Plan the shots as a rhythm across the book: open wide to show the world, go close for the strongest feelings and the turning point, and never use the same shot on three pages in a row.
 - focus: the one thing the eye should land on first in this page's picture (a face, an object, a gap between two characters), in a few words.
 - turn: the page-turn hook, where the page has one: what the reader is left wondering or waiting for as the page is turned, which the NEXT page answers at once (a sound with no source yet, a door half open, a reach that has not landed, a question just asked). One short line; empty string for pages that simply rest. Give at least one page in four a hook, always including the page before the turning point, and never the last page.
@@ -226,13 +227,17 @@ const PROOF_INSTRUCTIONS = `You are the proofreader for a children's picture boo
 MAJOR picture problems are only those a parent reading aloud would notice and that confuse the story: a named character drawn as a different character; a named character the picture needs is absent; a named character appears who should not be there; the one thing the page is about is not shown (the text says stuck and nothing is stuck).
 ALWAYS MAJOR, however small it is drawn and whatever else is right: a named character drawn where the story facts or the must-NOT-show list say it cannot be (outside and free when the facts say it is trapped inside something; moving by itself when it is being carried; present after being left behind; in a picture that does not list it). Check this before anything else, and name the character. Also major: the thing the story's problem depends on is drawn in a state that undoes the problem (something the facts call stuck or out of reach is free or within reach; an entrance the facts call blocked is wide open).
 MINOR is everything else: exact counts of background things, details of props and small objects, how something is held, pose and anatomy details, markings and stripes, colours of small things, scenery. When unsure, choose minor. Do not report matters of taste or composition at all.
-"pass" is true when there are no text problems, no extra text and no major picture problems.`;
+NUMBERS: when the page's words or its picture brief state how many of something the picture shows ("seven arms hold on", "three apples left"), count them in the picture, slowly, one by one. Report each mismatch in "countProblems" (what was counted, the number stated, the number you see). Skip things that are cut off by the edge or mostly hidden, and report nothing when you cannot count with confidence.
+THE PAGE BEFORE: when a second image is attached it is the previous page of the book. Set "sameAsPrevious" to true only when the two pictures would read as the same picture at a glance: the same camera distance and angle AND the same characters in the same places on the page. The same place, the same characters or the same art style alone are NOT a repeat; a clearly different distance, angle or arrangement is enough to be different. Without a second image it is false.
+"pass" is true when there are no text problems, no extra text, no major picture problems, no count problems and sameAsPrevious is false.`;
 const PROOF_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['textProblems', 'extraText', 'pictureProblems', 'pass', 'fixNotes'],
+  type: 'object', additionalProperties: false, required: ['textProblems', 'extraText', 'pictureProblems', 'countProblems', 'sameAsPrevious', 'pass', 'fixNotes'],
   properties: {
     textProblems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['expected', 'found'], properties: { expected: { type: 'string' }, found: { type: 'string', description: 'what is lettered instead, or "missing"' } } } },
     extraText: { type: 'array', description: 'lettering in the picture that is not expected', items: { type: 'string' } },
     pictureProblems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['issue', 'severity'], properties: { issue: { type: 'string' }, severity: { type: 'string', enum: ['major', 'minor'] } } } },
+    countProblems: { type: 'array', description: 'stated numbers the picture gets wrong', items: { type: 'object', additionalProperties: false, required: ['what', 'expected', 'found'], properties: { what: { type: 'string', description: 'what was counted, e.g. "arms holding the doorway"' }, expected: { type: 'integer' }, found: { type: 'integer' } } } },
+    sameAsPrevious: { type: 'boolean', description: 'true only when a previous page is attached and this picture repeats its camera and arrangement' },
     pass: { type: 'boolean' }, fixNotes: { type: 'string', description: 'if not pass: short instructions for the illustrator, one per line; otherwise ""' },
   },
 };
@@ -249,7 +254,9 @@ Rules for "text" (the words printed on the page):
 - Page turns: a page whose notes carry a page-turn hook ends on that hook and stops short of the answer; the next page opens by answering it.
 
 Rules for "illustration" (sent to the image model; it never sees other pages):
-- The illustrator sees ONE page at a time and knows nothing else about the story, so each brief is complete: 60–110 words describing one single moment, in this fixed order: (1) where we are, naming the place from the planning notes and the part of it, with the landmark that matters and the time of day; (2) every character in the picture and exactly where each one is — left or right, in front or behind, inside or outside, on top of or under what; (3) what each is doing with which part of its body, and the one feeling on its face; (4) the state of every important object — who holds it, what is blocked, stuck, open, shut or out of reach, and by how much, including every carry-over detail; (5) how close the camera is and from where: use the page's planned shot (wide, medium, close-up) and make its planned focus the clearest thing in the picture; when none is planned, choose them so that no three pages in a row share a shot. Describe what is SEEN, not what it means.
+- The illustrator sees ONE page at a time and knows nothing else about the story, so each brief is complete: 60–110 words describing one single moment, in this fixed order: (1) where we are, naming the place from the planning notes and the part of it, with the landmark that matters and the time of day; (2) every character in the picture and exactly where each one is AS THIS PAGE'S CAMERA SEES IT — near and large or far and small, in front or behind, at which edge, inside or outside, on top of or under what; (3) what each is doing with which part of its body, and the one feeling on its face; (4) the state of every important object — who holds it, what is blocked, stuck, open, shut or out of reach, and by how much, including every carry-over detail; (5) the camera: each page's notes give its "Camera" set-up (how close, from where), and the picture is drawn with it. Stage the whole brief for that camera — describe the scene as seen from there — and make the planned focus the clearest thing in the picture. Describe what is SEEN, not what it means.
+- Every picture is its own composition. Pages that follow each other in the same place must NOT repeat an arrangement: before writing a brief, look at the one before it and change who is near and who is far, which way everyone faces, and what fills the foreground. Never give the same left-to-right line-up on two pages. A fact from the state (who is beside the door, who is inside) fixes where a character IS, not where it appears in the frame: seen from the other side, from above or from behind, the same facts make a different picture.
+- Not everyone who is present is in the frame. A close-up shows the one or two characters it is about; the others are out of frame and are left out of the brief and out of "characters". A view from one character's place may leave that character out. Across a run of pages in one place, vary who is in the picture.
 - Leave out what is supplied separately with every picture: do not describe the art style, rendering, line or colour treatment, and do not say where to leave room for the words. Call a recurring place or object by the name the world note gives it and do not re-describe its fixed look (colours, size, material); say only where it is and what state it is in on this page.
 - Story state: the page's "state" gives the facts at the END of that page; the state of the page before it gives the facts as this page begins. The brief must agree with both. A character the state puts inside, under or behind something is drawn only there: if the picture looks in at them, say so in the brief ("seen through the gap, deep inside the hollow") and list them in "characters"; otherwise leave them out of the brief and out of "characters". Everyone and everything the page text names as present is in the brief.
 - Refer to characters by name only; do not redescribe their appearance (their look is supplied separately).
@@ -506,7 +513,7 @@ export function createBooks(deps) {
   }
   function publicBook(b) {
     const { snapshots, ...rest } = b;
-    return { ...rest, worldSheetStale: Boolean(b.worldSheetId && b.worldSheetOf != null && b.worldSheetOf !== b.world), pages: b.pages.map((p) => ({ ...p, ...promptState(b, p) })), undoLabel: snapshots?.length ? snapshots[snapshots.length - 1].label : null };
+    return { ...rest, worldSheetStale: Boolean(b.worldSheetId && b.worldSheetOf != null && b.worldSheetOf !== b.world), pages: b.pages.map(({ draftOf, ...p }) => ({ ...p, ...promptState(b, p), draftCurrent: Boolean(p.draftId && draftOf === (p.imagePrompt || (canPrompt(p) ? pagePrompt(b, p) : ''))) })), undoLabel: snapshots?.length ? snapshots[snapshots.length - 1].label : null };
   }
   async function handleUndo(id) {
     let label;
@@ -592,6 +599,7 @@ export function createBooks(deps) {
     const persona = (c) => { const l = c.characterId && all.find((x) => x.id === c.characterId); const t = l && storyLine(l); return t ? ` Personality notes (keep them in character): ${t}` : ''; };
     const a = audienceOf(book);
     const pages = book.pages.filter((p) => p.kind === 'page');
+    const cams = cameraPlan(book.pages);
     return [
       `Title: ${book.title}`, `Logline: ${book.logline}`, `Theme: ${book.theme}`,
       `Audience: ages ${a.id}. ${a.guidance}. Words per page: ${a.words[0]}–${a.words[1]}.`,
@@ -611,6 +619,7 @@ export function createBooks(deps) {
         p.continuity && `  Carries over: ${p.continuity}`,
         p.state && `  State at the end: ${p.state}`,
         (p.shot || p.focus) && `  Picture: ${[p.shot && `${shotLabel(p.shot).toLowerCase()} shot`, p.focus && `the eye lands first on ${p.focus}`].filter(Boolean).join('; ')}`,
+        cams.get(p.id) && `  Camera (write the illustration brief for exactly this set-up): ${cams.get(p.id).text}`,
         p.turn && `  Page-turn hook (the page ends here; the next page answers): ${p.turn}`,
         p.text && `  Current text: ${p.text}`,
       ].filter(Boolean).join('\n')).join('\n')}`,
@@ -1048,6 +1057,11 @@ export function createBooks(deps) {
     const facts = storyFacts(book, page), who = inPicture(book, page);
     const cast = book.cast.map((c) => `- ${c.name}: ${String(c.description || '').slice(0, 220)}`).join('\n');
     const label = isCover ? 'cover' : `page ${page.n}`;
+    // The page before, when it has a picture: shown small, only to catch a picture that repeats it.
+    const prev = !isCover && book.pages.find((p) => p.kind === 'page' && p.n === page.n - 1 && p.imageId);
+    const prevFile = prev && await deps.recordFile(prev.imageId);
+    const prevBuf = prevFile && await fsp.readFile(prevFile).catch(() => null);
+    const mime = (f) => `image/${path.extname(f).slice(1).toLowerCase().replace('jpg', 'jpeg') || 'png'}`;
     const input = [{ role: 'user', content: [{ type: 'input_text', text: [
       isCover ? `Front cover of "${book.title}".` : `Page ${page.n} of "${book.title}".`,
       lettered ? `LETTERING THAT MUST APPEAR (exactly this${isCover ? ', the title' : ''}, and no other text):\n${lettered}` : 'NO LETTERING IS EXPECTED: the picture must contain no words, letters, numbers, captions or speech bubbles at all.',
@@ -1057,11 +1071,15 @@ export function createBooks(deps) {
       facts.length && `STORY FACTS (where everyone and everything is at this point of the story; the picture may not contradict them):\n${facts.join('\n')}`,
       !isCover && book.storyline.obstacle && `THE PROBLEM THE STORY DEPENDS ON: ${book.storyline.obstacle}`,
       cast && `CHARACTERS (how to tell them apart):\n${cast}`,
-    ].filter(Boolean).join('\n\n') }, { type: 'input_image', image_url: `data:image/png;base64,${(await fsp.readFile(file)).toString('base64')}`, detail: 'high' }] }];
+      prevBuf ? `Two images follow. The FIRST is the picture to proofread. The SECOND is page ${prev.n}, the page before it, attached only for the "sameAsPrevious" question: do not proofread it.` : '',
+    ].filter(Boolean).join('\n\n') }, { type: 'input_image', image_url: `data:${mime(file)};base64,${(await fsp.readFile(file)).toString('base64')}`, detail: 'high' },
+      ...(prevBuf ? [{ type: 'input_image', image_url: `data:${mime(prevFile)};base64,${prevBuf.toString('base64')}`, detail: 'low' }] : [])] }];
     const { parsed: r } = await llmJson('book_page_proof', PROOF_INSTRUCTIONS, input, PROOF_SCHEMA, { type: 'book_page_proof', bookId: id, page: label }, () => {}, 'low');
-    const issues = [...(r.textProblems || []).map((x) => `Text: “${x.expected}” → ${x.found}`), ...(r.extraText || []).map((x) => `Extra text: “${x}”`), ...(r.pictureProblems || []).filter((x) => x.severity === 'major').map((x) => x.issue)].map((x) => clampStr(x, 400));
+    const issues = [...(r.textProblems || []).map((x) => `Text: “${x.expected}” → ${x.found}`), ...(r.extraText || []).map((x) => `Extra text: “${x}”`), ...(r.pictureProblems || []).filter((x) => x.severity === 'major').map((x) => x.issue),
+      ...(r.countProblems || []).filter((x) => x.expected !== x.found).map((x) => `Count: the page says ${x.expected} ${x.what}, the picture shows ${x.found}. Draw exactly ${x.expected}, each one separate and easy to count`),
+      ...(prevBuf && r.sameAsPrevious ? [`Looks like page ${prev.n}: the same camera and the same arrangement. Use this page's own camera set-up, with a clearly different distance, angle and placing of the characters`] : [])].map((x) => clampStr(x, 400));
     const notes = (r.pictureProblems || []).filter((x) => x.severity !== 'major').map((x) => clampStr(x.issue, 400));
-    const check = { imageId: recId, pass: issues.length === 0, issues, notes, fixNotes: issues.length ? [...issues, ...notes].join('\n') : '', at: new Date().toISOString() };
+    const check = { imageId: recId, pass: issues.length === 0, issues, notes, repeats: prevBuf && r.sameAsPrevious ? prev.n : null, fixNotes: issues.length ? [...issues, ...notes].join('\n') : '', at: new Date().toISOString() };
     await withBook(id, (b) => { const p = b.pages.find((x) => x.id === pageId); if (p && p.imageId === recId) p.check = check; return b; });
     await appendLog({ type: 'book_page_proof', bookId: id, page: label, recordId: recId, pass: check.pass, issues });
     return check;
@@ -1091,8 +1109,8 @@ export function createBooks(deps) {
   }
   // ---------- reference pictures ----------
   // Words alone let places and props drift from page to page, so a picture is drawn with pictures beside it: the world
-  // sheet (places and recurring objects), and one earlier page of the book, the nearest one set in the same place whose
-  // picture passed proofreading, failing that the nearest good page as a style reference. (One page, not several, and
+  // sheet (places and recurring objects) or, in a book without one, one earlier page: the nearest one set in the same
+  // place whose picture passed proofreading, failing that the nearest good page as a style reference. (One page, not several, and
   // the nearest rather than always the first: a reference's cast and props tend to leak into the new picture.) A page
   // the author pinned as the style anchor is added as well.
   const goodPicture = (p) => !(p.check && p.check.imageId === p.imageId && !p.check.pass);
@@ -1105,12 +1123,18 @@ export function createBooks(deps) {
     const nearest = (list) => [...list].sort((a, b) => Math.abs(a.n - page.n) - Math.abs(b.n - page.n) || a.n - b.n)[0];
     const story = others.filter((p) => p.kind === 'page');
     const key = page.kind === 'page' ? placeKey(page.setting) : '';
-    const samePlace = key ? nearest(story.filter((p) => goodPicture(p) && placeKey(p.setting) === key)) : null;
     const pinned = others.find((p) => p.id === book.anchorPageId);
+    // With a world sheet the place is already fixed by the sheet, so no neighbouring page is sent: the image model copies
+    // a same-place page's layout whatever the words beside it say, and a run of pages in one place turns into one picture.
+    // The neighbour is then kept only as a style reference, and only when nothing else carries the style (no anchor
+    // page, and no character of this page with reference pictures of its own).
+    const sheet = Boolean(book.worldSheetId);
+    const linked = book.cast.some((c) => c.characterId && page.characters.includes(c.name));
+    const samePlace = key && !sheet ? nearest(story.filter((p) => goodPicture(p) && placeKey(p.setting) === key)) : null;
     const noLeak = 'Who is in this picture, where they are and what they do comes only from the scene described above: never carry over a character, an object, a pose, the framing or any lettering because the reference shows it. Do NOT reuse its camera angle, its distance, the left-to-right order of the characters or its background layout: this page has its own camera set-up, given above, and must look clearly different from it at a glance.';
     if (samePlace) out.push({ recId: samePlace.imageId, label: `same place: ${label(samePlace)}`, text: `${label(samePlace)} of this same book, set in the same place. Match its rendering style, and keep the place as it is drawn there: the look of its landmarks and objects (seen now from this page's own camera). ${noLeak}` });
     if (pinned && pinned !== samePlace) out.push({ recId: pinned.imageId, label: `style anchor: ${label(pinned)}`, text: `${label(pinned)} of this same book, as a style reference only. Match its rendering, line, palette and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
-    if (!samePlace && !pinned) {
+    if (!samePlace && !pinned && !(sheet && linked)) {
       const near = nearest(story.filter(goodPicture)) || nearest(others.filter(goodPicture));
       if (near) out.push({ recId: near.imageId, label: `style: ${label(near)}`, text: `${label(near)} of this same book, as a style reference only. Match its rendering, line and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
     }
@@ -1150,7 +1174,23 @@ Constraints:
     return { book: updated, record: rec };
   }
 
-  async function drawPage(id, pageId, fixNotes = '') {
+  // ---------- draft pass ----------
+  // A sketch of a page: the same prompt at low quality and about a quarter of the size, for a fraction of the price.
+  // Drafts are looked at side by side before the real pictures are paid for (do the pages differ? is everyone where
+  // they should be?). A draft is not the page's picture; the final picture of a page whose prompt has not changed
+  // since is drawn with the draft beside it, so the approved composition is the one that gets painted.
+  function draftSize(size) {
+    const m = /^(\d+)x(\d+)$/.exec(size || '');
+    if (!m) return '1024x1024';
+    const k = Math.sqrt(700000 / (m[1] * m[2]));
+    const w = Math.max(16, Math.round(m[1] * k / 16) * 16);
+    let h = Math.max(16, Math.round(m[2] * k / 16) * 16);
+    while (w * h < 655360) h += 16;
+    return `${w}x${h}`;
+  }
+  const draftRef = (page, prompt) => (page.draftId && page.draftOf === prompt
+    ? [{ recId: page.draftId, label: 'draft', text: 'a rough, low-quality sketch of THIS page. Keep its composition: the camera distance and angle, who is where, how large, and what is in the foreground. Paint everything afresh at full quality: the characters from their own references, clean shapes, correct lettering. Do not copy its roughness, its mistakes or its lettering.' }] : []);
+  async function drawDraft(id, pageId) {
     const book = await getBook(id);
     const page = book.pages.find((p) => p.id === pageId);
     if (!page) throw new HttpError(404, 'Page not found.');
@@ -1158,7 +1198,70 @@ Constraints:
     const all = await readCharacters();
     const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
     const refs = await loadRefs(refPlan(book, page), (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => n + (all.find((x) => x.id === cid)?.refs.length || 0), 0));
-    const prompt = withFix(page.imagePrompt || pagePrompt(book, page), fixNotes);      // the prompt reviewed in the Picture prompts step, if there is one
+    const prompt = page.imagePrompt || pagePrompt(book, page);
+    const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
+    const r = await handleGenerate({
+      prompt, originalPrompt: `${book.title} — ${label} (draft): ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, quality: 'low', size: draftSize(book.image.size), n: 1, format: 'png',
+      characterIds, tags: ['book', slugify(book.title || 'book'), page.kind === 'cover' ? 'cover' : `page-${page.n}`, 'draft'],
+    }, { ai: { feature: 'book_page_draft', refs: { bookId: id } }, refs });
+    const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — ${label} (draft)` });
+    const updated = await withBook(id, (b) => { const p = b.pages.find((x) => x.id === pageId); if (p) { p.draftId = rec.id; p.draftOf = prompt; } return b; });
+    await appendLog({ type: 'book_page_draft', bookId: id, page: label, recordId: rec.id, costUsd: rec.costUsd });
+    return { book: updated, record: rec };
+  }
+
+  // ---------- look-alike check ----------
+  // Every pair of neighbouring pages is shown to a decision model (cheap and fast: a yes/no probability, no text):
+  // would the two pictures read as the same picture at a glance? Run on the drafts it catches a book that is about to
+  // become one picture fifteen times before the real pictures are paid for; it works on finished pictures as well.
+  const SIMILAR_Q = 'Would these two pictures read as the same picture at a glance: the same camera distance and angle AND the same characters in the same places on the page? The same place, the same characters or the same art style alone do not make them the same; a clearly different distance, angle or arrangement makes them different. Ignore the lettering and the picture quality.';
+  const pictureOf = (p) => p.imageId || p.draftId || null;
+  async function smallPicture(recId) {
+    const file = recId && deps.recordFile && await deps.recordFile(recId);
+    if (!file) return null;
+    const thumb = path.join(OUTPUT_DIR, '.thumbs', `${path.basename(file, path.extname(file))}.jpg`);
+    const buf = await fsp.readFile(thumb).catch(() => null);
+    if (buf) return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    const full = await fsp.readFile(file).catch(() => null);
+    return full && `data:image/${path.extname(file).slice(1).toLowerCase().replace('jpg', 'jpeg') || 'png'};base64,${full.toString('base64')}`;
+  }
+  async function handleSimilar(id) {
+    const book = await getBook(id);
+    if (!deps.ai.decide) throw new HttpError(500, 'The decision model is not available on this server.');
+    const story = book.pages.filter((p) => p.kind === 'page').sort((a, b) => a.n - b.n);
+    const todo = story.slice(1).map((p, i) => [story[i], p]).filter(([a, b]) => pictureOf(a) && pictureOf(b));
+    if (!todo.length) throw new HttpError(400, 'Two neighbouring pages need a draft or a picture first.');
+    const pairs = [];
+    let cost = 0, failed = '';
+    const one = async ([a, b]) => {
+      const [ia, ib] = await Promise.all([smallPicture(pictureOf(a)), smallPicture(pictureOf(b))]);
+      if (!ia || !ib) return;
+      const r = await deps.ai.decide({ feature: 'book_similar', refs: { bookId: id }, questions: [{ type: 'predicate', name: 'repeat', instructions: SIMILAR_Q }],
+        input: [{ role: 'user', content: [{ type: 'input_text', text: `Two consecutive pages of one children's picture book. Image A is page ${a.n}:` }, { type: 'input_image', image_url: ia }, { type: 'input_text', text: `Image B is page ${b.n}, the page after it:` }, { type: 'input_image', image_url: ib }] }] });
+      const p = r.answers.repeat?.probability;
+      cost += r.costUsd || 0;
+      if (typeof p === 'number') pairs.push({ a: a.n, b: b.n, aId: pictureOf(a), bId: pictureOf(b), p: +p.toFixed(3) });
+    };
+    // A few at a time; the first failure (no credit, no access to the model) stops the rest.
+    for (let i = 0; i < todo.length && !failed; i += 4) await Promise.all(todo.slice(i, i + 4).map((t) => one(t).catch((e) => { failed = failed || e.message; })));
+    if (!pairs.length) throw new HttpError(502, failed || 'The pictures could not be compared.');
+    pairs.sort((x, y) => x.a - y.a);
+    const updated = await withBook(id, (b) => { b.similar = { at: new Date().toISOString(), pairs }; return b; });
+    await appendLog({ type: 'book_similar', bookId: id, pairs: pairs.map((x) => `${x.a}-${x.b}: ${x.p}`), costUsd: cost, error: failed || null });
+    return { book: updated, costUsd: cost, compared: pairs.length, error: failed || null };
+  }
+
+  async function drawPage(id, pageId, fixNotes = '') {
+    const book = await getBook(id);
+    const page = book.pages.find((p) => p.id === pageId);
+    if (!page) throw new HttpError(404, 'Page not found.');
+    if (!page.illustration && !page.beat) throw new HttpError(400, 'This page needs an illustration brief first.');
+    const all = await readCharacters();
+    const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
+    const base = page.imagePrompt || pagePrompt(book, page);      // the prompt reviewed in the Picture prompts step, if there is one
+    // The approved draft leads the references; a redraw that fixes mistakes is not held to the composition that had them.
+    const refs = await loadRefs([...(fixNotes ? [] : draftRef(page, base)), ...refPlan(book, page)], (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => n + (all.find((x) => x.id === cid)?.refs.length || 0), 0));
+    const prompt = withFix(base, fixNotes);
     const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${book.title} — ${label}: ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, n: 1, format: 'png',
@@ -1364,9 +1467,11 @@ Constraints:
     else if (req.method === 'POST' && a === 'world-sheet') send(res, 200, pub(await handleWorldSheet(id)));
     else if (req.method === 'POST' && a === 'logic') { await getBook(id); await streamed(res, url, async (progress) => pub(await handleLogic(id, progress))); }
     else if (req.method === 'POST' && a === 'pages' && c === 'image') send(res, 200, pub(await handlePageImage(id, b, await readJson(req).catch(() => ({})))));
+    else if (req.method === 'POST' && a === 'similar') send(res, 200, pub(await handleSimilar(id)));
+    else if (req.method === 'POST' && a === 'pages' && c === 'draft') send(res, 200, pub(await drawDraft(id, b)));
     else if (req.method === 'POST' && a === 'pages' && c === 'check') { const check = await checkPage(id, b); send(res, 200, { check, book: publicBook(await getBook(id)) }); }
     else if (req.method === 'POST' && a === 'cast' && c === 'design') send(res, 200, pub(await handleDesignCast(id, b)));
-    else if (req.method === 'GET' && a === 'prompt' && b) { const book = await getBook(id); const page = book.pages.find((x) => x.id === b); if (!page) throw new HttpError(404, 'Page not found.'); send(res, 200, { prompt: pagePrompt(book, page), references: refPlan(book, page).map((r) => r.label) }); }
+    else if (req.method === 'GET' && a === 'prompt' && b) { const book = await getBook(id); const page = book.pages.find((x) => x.id === b); if (!page) throw new HttpError(404, 'Page not found.'); send(res, 200, { prompt: pagePrompt(book, page), references: [...draftRef(page, page.imagePrompt || pagePrompt(book, page)), ...refPlan(book, page)].map((r) => r.label) }); }
     else if (req.method === 'GET' && a === 'images.zip') {
       const { zip, filename } = await exportImagesZip(id, await readHistory(), url.searchParams.get('story') === '1');
       res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length, 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' });

@@ -817,6 +817,36 @@ function renderShotBar() {
     const s = shotOf(p.shot);
     return `<span class="${run ? 'run' : ''}" title="Page ${p.n}: ${s ? `${escapeHtml(s.label)} — ${escapeHtml(s.hint)}` : 'no shot planned'}${run ? ' · third page in a row at this distance' : ''}">${s ? escapeHtml(s.label[0]) : '·'}</span>`;
   }).join('');
+  renderSameRuns();
+}
+// Runs of more than three pages in one place with the same characters: their pictures come out looking alike, whatever
+// the camera. Named under the shot row with a re-draft instruction ready to use.
+const placeKeyOf = (setting) => String(setting || '').split(/[;(—]| - /)[0].toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+function sameRuns() {
+  const pages = storyPages(), runs = [];
+  const key = (p) => (placeKeyOf(p.setting) ? `${placeKeyOf(p.setting)}|${[...p.characters].sort().join(',')}` : '');
+  for (let i = 0; i < pages.length;) {
+    let j = i;
+    while (key(pages[i]) && j + 1 < pages.length && key(pages[j + 1]) === key(pages[i])) j++;
+    if (j - i + 1 > 3) runs.push({ from: pages[i].n, to: pages[j].n, count: j - i + 1, place: pages[i].setting.split(/[;(—]/)[0].trim() });
+    i = j + 1;
+  }
+  return runs;
+}
+function renderSameRuns() {
+  let box = document.getElementById('same-runs');
+  if (!box) { box = document.createElement('div'); box.id = 'same-runs'; box.className = 'same-runs'; els.shotBar.after(box); }
+  const runs = book.fromSeries ? [] : sameRuns();
+  box.hidden = !runs.length;
+  box.innerHTML = runs.map((r, i) => `<div>⚠ Pages ${r.from}–${r.to}: ${r.count} pages in a row in the same place (${escapeHtml(r.place)}) with the same characters. Their pictures will look alike. <button class="mini" type="button" data-run="${i}">Use as a re-draft instruction</button></div>`).join('');
+  box.onclick = (e) => {
+    const b = e.target.closest('[data-run]'); if (!b) return;
+    const r = runs[Number(b.dataset.run)];
+    const field = els.outlineInstructions;
+    const text = `Pages ${r.from}–${r.to} are ${r.count} pages in a row in the same place with the same characters, so their pictures would look the same. Keep the story, but spend at most three pages in a row there: move within the place or to the next one, or change who is visible on each page.`;
+    if (field) { field.value = text; field.dispatchEvent(new Event('input', { bubbles: true })); field.scrollIntoView({ behavior: 'smooth', block: 'center' }); field.focus(); }
+    else { navigator.clipboard?.writeText(text); setStatus('Instruction copied. Paste it into the re-draft box and re-draft the outline.', 'ok'); }
+  };
 }
 // What the read-aloud editor changed the last time it went through the text.
 function renderEdit() {
@@ -1330,6 +1360,7 @@ function renderPrompts() {
     els.promptList.appendChild(bar);
   }
   if (!pages.length) els.promptList.innerHTML = '<div class="empty">Write the page text first. Each page’s picture brief is what its prompt is built from.</div>';
+  else renderDraftSheet();
   for (const p of pages) {
     const state = !p.imagePrompt ? ['', 'No prompt yet'] : p.promptStale ? ['warn', 'Page changed since this was written'] : p.promptEdited ? ['edited', 'Edited by you'] : ['ready', 'Prompt ready'];
     const linked = book.cast.filter((c) => c.characterId && p.characters.includes(c.name)).map((c) => c.name);
@@ -1371,8 +1402,78 @@ function renderPrompts() {
     <div><div class="label-row"><span>Size and quality</span></div><p>${escapeHtml(`${book.image.size} · ${book.image.quality} · ${book.image.model}`)}</p></div>
     <div class="estimate"><span class="hint">${missing ? `Drawing the ${missing} missing picture${missing === 1 ? '' : 's'} will cost about` : 'Every page has a picture'}</span><b>${missing && each ? fmtCost(each * missing) : missing ? '—' : '✓'}</b>
       <span class="hint">Prompts are free to rewrite. Drawing is the part that costs, so measure twice, draw once.</span></div>
-    <button class="btn secondary small ps-all" type="button">${s.prompted ? '↻ Rewrite all prompts' : 'Write the picture prompts'}</button>`;
+    <button class="btn secondary small ps-all" type="button">${s.prompted ? '↻ Rewrite all prompts' : 'Write the picture prompts'}</button>
+    <h3>Before you pay for pictures</h3>
+    <button class="btn secondary small ps-draft" type="button" title="Draws every page that has no picture as a small, low-quality sketch, so you can see the whole book side by side first. A page whose prompt you then leave alone is painted with its draft as the composition.">✏️ Draft ${draftTodo().length ? `${draftTodo().length} page${draftTodo().length === 1 ? '' : 's'}` : 'pages'}${draftTodo().length && draftEach() ? ` ≈ ${fmtCost(draftEach() * draftTodo().length)}` : ''}</button>
+    <button class="btn secondary small ps-similar" type="button" title="A fast, cheap decision model looks at each pair of neighbouring pages (drafts or pictures) and says whether they would read as the same picture.">👀 Check for look-alike pages</button>
+    <span class="hint">Drafts cost a fraction of a picture. Look-alikes are marked on the sheet.</span>`;
+  els.promptSide.querySelector('.ps-draft').addEventListener('click', draftAll);
+  els.promptSide.querySelector('.ps-similar').addEventListener('click', checkSimilar);
   els.promptSide.querySelector('.ps-all').addEventListener('click', () => { if (!s.prompted || confirm('Rewrite every prompt from the pages as they are now? Prompts you edited are replaced too.')) writePrompts(null, true); });
+}
+
+// ---------- drafts and look-alikes ----------
+// A draft is a small low-quality sketch of a page, made from its prompt. The sheet shows the whole book side by side
+// (the picture where there is one, else the draft), with neighbours that look alike marked.
+const draftTodo = () => book.pages.filter((p) => (p.illustration || p.beat) && !p.imageId && !p.draftCurrent);
+const draftEach = () => estimateImageCost(book.image.model, '736x944', 'low') || estimateImageCost(book.image.model, '1024x1024', 'low');
+const ALIKE = 0.5;
+function alikePairs() {
+  const byN = new Map(book.pages.filter((p) => p.kind === 'page').map((p) => [p.n, p]));
+  const cur = (p) => p && (p.imageId || p.draftId);
+  return (book.similar?.pairs || []).filter((x) => x.p >= ALIKE && cur(byN.get(x.a)) === x.aId && cur(byN.get(x.b)) === x.bId);
+}
+function renderDraftSheet() {
+  const pages = book.pages.filter((p) => p.illustration || p.beat);
+  if (!pages.some((p) => p.imageId || p.draftId)) return;
+  const alike = alikePairs();
+  const box = document.createElement('div'); box.className = 'draft-sheet';
+  box.innerHTML = `<div class="ds-head"><b>The whole book, side by side</b><span class="hint">${alike.length ? `⚠ ${alike.length} pair${alike.length === 1 ? '' : 's'} of neighbouring pages look alike. Change the picture brief or the prompt of one page in each pair, then draft it again.` : book.similar ? 'No neighbouring pages look alike.' : 'Do the pages differ from each other? Is everyone where they should be?'}</span></div>
+    <div class="ds-grid">${pages.map((p) => {
+      const id = p.imageId || p.draftId, url = id && imageUrl(id);
+      const hit = alike.find((x) => x.b === p.n);
+      return `<a class="ds-cell${hit ? ' alike' : ''}" data-id="${p.id}" title="${escapeHtml(pageLabel(p))}${hit ? ` · looks like page ${hit.a} (${Math.round(hit.p * 100)}%)` : ''}">${url ? `<img src="${url}" alt="" loading="lazy">` : '<span class="ds-none">no draft</span>'}<small>${escapeHtml(pageLabel(p))}${p.imageId ? '' : p.draftId ? (p.draftCurrent ? ' · draft' : ' · old draft') : ''}${hit ? ` · like p${hit.a}` : ''}</small></a>`;
+    }).join('')}</div>`;
+  box.addEventListener('click', (e) => { const c = e.target.closest('.ds-cell'); if (c) els.promptList.querySelector(`.prompt-card[data-id="${c.dataset.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  els.promptList.insertBefore(box, els.promptList.querySelector('.prompt-card'));
+}
+async function draftAll() {
+  if (busy) return;
+  await flush();
+  const todo = draftTodo();
+  if (!todo.length) { setStatus('Every page already has a picture or an up-to-date draft.', 'ok'); return; }
+  const each = draftEach();
+  if (!confirm(`Draft ${todo.length} page${todo.length === 1 ? '' : 's'} as small low-quality sketches?\n${each ? `Estimated cost ≈ ${fmtCost(each * todo.length)} (≈ ${fmtCost(each)} each).` : 'Each draft is a paid generation, at a fraction of the price of a picture.'}`)) return;
+  setBusy(true); stopRequested = false; els.stop.hidden = false;
+  const onProgress = showProgress('Drafting');
+  let done = 0, cost = 0;
+  try {
+    // Drafts do not depend on each other, so three are drawn at a time.
+    for (let i = 0; i < todo.length && !stopRequested; i += 3) {
+      const batch = todo.slice(i, i + 3);
+      onProgress({ phase: `Sketching ${batch.map((p) => pageLabel(p).toLowerCase()).join(', ')} · spent ${fmtCost(cost)}`, done, total: todo.length });
+      const out = await Promise.all(batch.map((p) => api('POST', `/api/books/${book.id}/pages/${p.id}/draft`)));
+      for (const r of out) { records.set(r.record.id, r.record); cost += r.record.costUsd || 0; done++; }
+      book = out[out.length - 1].book;
+      book = await api('GET', `/api/books/${book.id}`);
+      renderPrompts();
+    }
+    hideProgress();
+    setStatus(`${stopRequested ? 'Stopped' : 'Done'}: ${done} draft${done === 1 ? '' : 's'} for ≈ ${fmtCost(cost)}. Look at them side by side, then 👀 check for look-alikes.`, 'ok');
+  } catch (e) { hideProgress(); setStatus(`Stopped after ${done} draft${done === 1 ? '' : 's'}: ${escapeHtml(e.message)}`, 'error'); }
+  finally { setBusy(false); els.stop.hidden = true; renderPrompts(); }
+}
+async function checkSimilar() {
+  if (busy) return;
+  await flush();
+  setBusy(true); setStatus('<span class="spinner"></span>Comparing neighbouring pages…');
+  try {
+    const r = await api('POST', `/api/books/${book.id}/similar`);
+    book = r.book;
+    const n = alikePairs().length;
+    setStatus(`${r.compared} pair${r.compared === 1 ? '' : 's'} compared${r.costUsd ? ` · ${fmtCost(r.costUsd)}` : ''}: ${n ? `${n} look alike (marked on the sheet).` : 'no two neighbours look alike.'}${r.error ? ` Some could not be compared: ${escapeHtml(r.error)}` : ''}`, n ? 'error' : 'ok');
+  } catch (e) { setStatus(`Could not compare the pages: ${escapeHtml(e.message)}`, 'error'); }
+  finally { setBusy(false); renderPrompts(); }
 }
 
 async function illustrateMissing() {
