@@ -609,10 +609,17 @@ const writerLine = (c) => [identityLine(c), storyLine(c)].filter(Boolean).join('
 
 // Build the character block appended to every prompt that uses references. Follows OpenAI's prompting guide:
 // assign each input image a numbered role, repeat the defining details in text, separate changes from constraints.
-function buildCharacterBlock(selected, startIndex = 1) {
+// Lean references: one picture per character instead of all of them (each costs about a cent of image input per
+// generation). The multi-view reference sheet when there is one, else a full view, else a face; a style-only picture last.
+const LEAN_ORDER = ['sheet', 'identity', 'face', 'style'];
+function sentRefs(c, lean) {
+  if (!lean || c.refs.length < 2) return c.refs;
+  return [[...c.refs].sort((a, b) => LEAN_ORDER.indexOf(refRole(a)) - LEAN_ORDER.indexOf(refRole(b)))[0]];
+}
+function buildCharacterBlock(selected, startIndex = 1, lean = false) {
   const refLines = [];
   let i = startIndex;
-  for (const c of selected) for (const r of c.refs) refLines.push(`- Image ${i++}: "${c.name}" — ${REF_ROLES[refRole(r)].text} Do not copy its pose, framing, background or any text.`);
+  for (const c of selected) for (const r of sentRefs(c, lean)) refLines.push(`- Image ${i++}: "${c.name}" — ${REF_ROLES[refRole(r)].text} Do not copy its pose, framing, background or any text.`);
   const identity = selected.map((c) => `- "${c.name}": ${identityLine(c) || 'as shown in the reference images.'} Keep the same facial features, head and body shape, proportions, color palette, outfit and art style as the reference images.`);
   const constraints = [
     `- Do not redesign ${selected.length > 1 ? 'any character' : 'the character'}. Change only the scene, pose, expression, action, composition, lighting and framing described above.`,
@@ -628,16 +635,16 @@ async function refDataUrl(c, r) {
   return `data:${MIME_BY_EXT[path.extname(r.file).toLowerCase()] || 'image/png'};base64,${buf.toString('base64')}`;
 }
 
-async function characterPayload(selected) {
+async function characterPayload(selected, lean = false) {
   const images = [];
   for (const c of selected) {
     if (!c.refs.length) throw new HttpError(400, `Character "${c.name}" has no reference images.`);
-    for (const r of c.refs) {
+    for (const r of sentRefs(c, lean)) {
       if (images.length >= MAX_REFS) throw new HttpError(400, `At most ${MAX_REFS} reference images can be sent per generation.`);
       images.push({ image_url: await refDataUrl(c, r) });
     }
   }
-  return { images, block: buildCharacterBlock(selected) };
+  return { images, block: buildCharacterBlock(selected, 1, lean) };
 }
 function characterContext(selected) {
   if (!selected.length) return '';
@@ -788,13 +795,14 @@ async function handleGenerate(body, extra = {}) {
   const tags = cleanTags(body.tags);
 
   const selected = await selectCharacters(body.characterIds);
+  const lean = Boolean(extra.leanRefs);
   let finalPrompt = prompt, characterPrompt = null, images = null;
   if (selected.length) {
-    const cp = await characterPayload(selected);
+    const cp = await characterPayload(selected, lean);
     images = cp.images; characterPrompt = cp.block;
     finalPrompt = `${prompt}\n\n${characterPrompt}`;
   }
-  const characters = selected.map((c) => ({ id: c.id, name: c.name, refs: c.refs.length }));
+  const characters = selected.map((c) => ({ id: c.id, name: c.name, refs: sentRefs(c, lean).length }));
   const extraRefs = Array.isArray(extra.refs) ? extra.refs : [];
   if (extraRefs.length) {
     images = images || [];

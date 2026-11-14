@@ -479,6 +479,10 @@ export function createBooks(deps) {
     // refs: earlier pictures of the book (and its world sheet) go to the illustrator as references (on unless switched off).
     return { model, quality, size, textInImage: 'textInImage' in v ? Boolean(v.textInImage) : Boolean(prev.textInImage), proof: 'proof' in v ? Boolean(v.proof) : prev.proof !== false,
       refs: 'refs' in v ? Boolean(v.refs) : prev.refs !== false,
+      // leanRefs: one reference picture per character, and no style-only page when the characters' own references carry the
+      // look (references are about half of what a picture costs). Off until compared side by side.
+      // draftFirst: a page gets its full picture only once it has an up-to-date draft (or already has a picture).
+      leanRefs: 'leanRefs' in v ? Boolean(v.leanRefs) : Boolean(prev.leanRefs), draftFirst: 'draftFirst' in v ? Boolean(v.draftFirst) : prev.draftFirst !== false,
       // pageStyle: classic (one picture + the story text) or a designed style (panels, captions and play boxes).
       pageStyle: PAGE_STYLE_IDS.includes(v.pageStyle) ? v.pageStyle : PAGE_STYLE_IDS.includes(prev.pageStyle) ? prev.pageStyle : 'classic' };
   }
@@ -1088,6 +1092,14 @@ export function createBooks(deps) {
   // body.fixNotes: mistakes of an earlier attempt to avoid. Otherwise, when proofreading is on (book.image.proof, or
   // body.proof), the picture is checked and redrawn once if it fails; the attempt with fewer problems stays selected.
   async function handlePageImage(id, pageId, body = {}) {
+    // Draft first: a full picture costs several times a draft, so it is only drawn once the page's composition has been
+    // seen. A page that already has a picture can be redrawn freely; books made from a card series have no drafts.
+    const b0 = await getBook(id), p0 = b0.pages.find((p) => p.id === pageId);
+    if (b0.image.draftFirst !== false && !b0.fromSeries && p0 && !p0.imageId && (p0.illustration || p0.beat)) {
+      const label = p0.kind === 'cover' ? 'The cover' : `Page ${p0.n}`;
+      if (!p0.draftId) throw new HttpError(409, `${label} has no draft yet. Draft it and look it over before drawing the full picture (or switch off “Draft first” in Brief & settings).`);
+      if (p0.draftOf !== (p0.imagePrompt || pagePrompt(b0, p0))) throw new HttpError(409, `${label} was changed after its draft was drawn. Draft it again and look it over before drawing the full picture.`);
+    }
     const first = await drawPage(id, pageId, clampStr(body.fixNotes, 2000));
     const proof = 'proof' in body ? Boolean(body.proof) : first.book.image.proof !== false;
     if (!proof || first.book.fromSeries || !deps.recordFile) return first;
@@ -1130,11 +1142,13 @@ export function createBooks(deps) {
     // page, and no character of this page with reference pictures of its own).
     const sheet = Boolean(book.worldSheetId);
     const linked = book.cast.some((c) => c.characterId && page.characters.includes(c.name));
+    // Lean references: when every character on the page has reference pictures of its own, those carry the style.
+    const allLinked = Boolean(book.image.leanRefs) && page.characters.length > 0 && page.characters.every((n) => book.cast.some((c) => c.name === n && c.characterId));
     const samePlace = key && !sheet ? nearest(story.filter((p) => goodPicture(p) && placeKey(p.setting) === key)) : null;
     const noLeak = 'Who is in this picture, where they are and what they do comes only from the scene described above: never carry over a character, an object, a pose, the framing or any lettering because the reference shows it. Do NOT reuse its camera angle, its distance, the left-to-right order of the characters or its background layout: this page has its own camera set-up, given above, and must look clearly different from it at a glance.';
     if (samePlace) out.push({ recId: samePlace.imageId, label: `same place: ${label(samePlace)}`, text: `${label(samePlace)} of this same book, set in the same place. Match its rendering style, and keep the place as it is drawn there: the look of its landmarks and objects (seen now from this page's own camera). ${noLeak}` });
     if (pinned && pinned !== samePlace) out.push({ recId: pinned.imageId, label: `style anchor: ${label(pinned)}`, text: `${label(pinned)} of this same book, as a style reference only. Match its rendering, line, palette and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
-    if (!samePlace && !pinned && !(sheet && linked)) {
+    if (!samePlace && !pinned && !(sheet && linked) && !allLinked) {
       const near = nearest(story.filter(goodPicture)) || nearest(others.filter(goodPicture));
       if (near) out.push({ recId: near.imageId, label: `style: ${label(near)}`, text: `${label(near)} of this same book, as a style reference only. Match its rendering, line and the way the characters are drawn, so that both look like pages of one book. Its place, composition and poses belong to that page. ${noLeak}` });
     }
@@ -1190,6 +1204,8 @@ Constraints:
   }
   const draftRef = (page, prompt) => (page.draftId && page.draftOf === prompt
     ? [{ recId: page.draftId, label: 'draft', text: 'a rough, low-quality sketch of THIS page. Keep its composition: the camera distance and angle, who is where, how large, and what is in the foreground. Paint everything afresh at full quality: the characters from their own references, clean shapes, correct lettering. Do not copy its roughness, its mistakes or its lettering.' }] : []);
+  // How many extra reference pictures fit beside the characters' own (one each with lean references).
+  const refRoom = (book, characterIds, all) => (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => { const k = all.find((x) => x.id === cid)?.refs.length || 0; return n + (book.image.leanRefs ? Math.min(1, k) : k); }, 0);
   async function drawDraft(id, pageId) {
     const book = await getBook(id);
     const page = book.pages.find((p) => p.id === pageId);
@@ -1197,13 +1213,13 @@ Constraints:
     if (!page.illustration && !page.beat) throw new HttpError(400, 'This page needs an illustration brief first.');
     const all = await readCharacters();
     const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
-    const refs = await loadRefs(refPlan(book, page), (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => n + (all.find((x) => x.id === cid)?.refs.length || 0), 0));
+    const refs = await loadRefs(refPlan(book, page), refRoom(book, characterIds, all));
     const prompt = page.imagePrompt || pagePrompt(book, page);
     const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${book.title} — ${label} (draft): ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, quality: 'low', size: draftSize(book.image.size), n: 1, format: 'png',
       characterIds, tags: ['book', slugify(book.title || 'book'), page.kind === 'cover' ? 'cover' : `page-${page.n}`, 'draft'],
-    }, { ai: { feature: 'book_page_draft', refs: { bookId: id } }, refs });
+    }, { ai: { feature: 'book_page_draft', refs: { bookId: id } }, refs, leanRefs: Boolean(book.image.leanRefs) });
     const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — ${label} (draft)` });
     const updated = await withBook(id, (b) => { const p = b.pages.find((x) => x.id === pageId); if (p) { p.draftId = rec.id; p.draftOf = prompt; } return b; });
     await appendLog({ type: 'book_page_draft', bookId: id, page: label, recordId: rec.id, costUsd: rec.costUsd });
@@ -1260,13 +1276,13 @@ Constraints:
     const characterIds = book.cast.filter((c) => c.characterId && page.characters.includes(c.name) && all.some((x) => x.id === c.characterId)).map((c) => c.characterId);
     const base = page.imagePrompt || pagePrompt(book, page);      // the prompt reviewed in the Picture prompts step, if there is one
     // The approved draft leads the references; a redraw that fixes mistakes is not held to the composition that had them.
-    const refs = await loadRefs([...(fixNotes ? [] : draftRef(page, base)), ...refPlan(book, page)], (deps.MAX_REFS || 16) - characterIds.reduce((n, cid) => n + (all.find((x) => x.id === cid)?.refs.length || 0), 0));
+    const refs = await loadRefs([...(fixNotes ? [] : draftRef(page, base)), ...refPlan(book, page)], refRoom(book, characterIds, all));
     const prompt = withFix(base, fixNotes);
     const label = page.kind === 'cover' ? 'cover' : `page ${page.n}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${book.title} — ${label}: ${page.illustration || page.beat}`.slice(0, 20000), ...book.image, n: 1, format: 'png',
       characterIds, tags: ['book', slugify(book.title || 'book'), page.kind === 'cover' ? 'cover' : `page-${page.n}`],
-    }, { ai: { feature: 'book_page_image', refs: { bookId: id } }, refs });
+    }, { ai: { feature: 'book_page_image', refs: { bookId: id } }, refs, leanRefs: Boolean(book.image.leanRefs) });
     const rec = await handleUpdate(r.images[0].id, { title: `${book.title} — ${label}` });
     const updated = await withBook(id, (b) => {
       const p = b.pages.find((x) => x.id === pageId);

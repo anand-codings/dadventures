@@ -8,7 +8,7 @@ const els = {
   bookSelect: $('book-select'), newBook: $('new-book'), deleteBook: $('delete-book'),
   briefBox: $('brief-box'), suggest: $('suggest'), ideas: $('ideas'),
   premise: $('premise'), audience: $('audience'), pageCount: $('page-count'), tone: $('tone'), themeBrief: $('theme-brief'), style: $('style'), briefNotes: $('brief-notes'), briefChars: $('brief-chars'),
-  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'), pageStyle: $('page-style'), pageStyleHint: $('page-style-hint'), proof: $('proof'), refs: $('refs'), worldSheet: $('world-sheet'), refrain: $('refrain'), device: $('device'), shotBar: $('shot-bar'), editPass: $('edit-pass'), editBox: $('edit-box'), logic: $('logic'), checkLogic: $('check-logic'), logicBox: $('logic-box'),
+  artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textInImage: $('text-in-image'), pageStyle: $('page-style'), pageStyleHint: $('page-style-hint'), proof: $('proof'), refs: $('refs'), leanRefs: $('lean-refs'), draftFirst: $('draft-first'), worldSheet: $('world-sheet'), refrain: $('refrain'), device: $('device'), shotBar: $('shot-bar'), editPass: $('edit-pass'), editBox: $('edit-box'), logic: $('logic'), checkLogic: $('check-logic'), logicBox: $('logic-box'),
   stepper: $('stepper'), next: $('next'), stop: $('stop'), undo: $('undo'), saveState: $('save-state'), status: $('status'), strip: $('strip'), topbar: $('topbar-meta'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
   empty: $('empty'), book: $('book'), editor: $('editor'), title: $('title'), logline: $('logline'), theme: $('theme'), styleGuide: $('style-guide'),
@@ -371,7 +371,7 @@ async function deleteBook() {
 function briefFromForm() {
   return { premise: els.premise.value, audience: els.audience.value, pageCount: snapFours(Number(els.pageCount.value) || 11), tone: els.tone.value, theme: els.themeBrief.value, setting: els.setting.value, style: els.style.value, notes: els.briefNotes.value, characterIds: [...briefChars] };
 }
-const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked, proof: els.proof.checked, refs: els.refs.checked, pageStyle: els.pageStyle.value || 'classic' });
+const imageFromForm = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textInImage: els.textInImage.checked, proof: els.proof.checked, refs: els.refs.checked, leanRefs: els.leanRefs.checked, draftFirst: els.draftFirst.checked, pageStyle: els.pageStyle.value || 'classic' });
 // Page types: a designed style gives each page a layout of panels with captions and boxes (see src/books.js PAGE_STYLES).
 const pageStyle = () => book?.image.pageStyle || 'classic';
 const isDesigned = () => pageStyle() !== 'classic';
@@ -493,7 +493,7 @@ function renderAll() {
     els.premise.value = b.brief.premise; els.audience.value = b.brief.audience; els.pageCount.value = b.brief.pageCount;
     els.tone.value = b.brief.tone; els.themeBrief.value = b.brief.theme; els.setting.value = b.brief.setting || ''; els.style.value = b.brief.style; els.briefNotes.value = b.brief.notes;
     briefChars.clear(); for (const id of b.brief.characterIds) briefChars.add(id);
-    els.imgModel.value = b.image.model; els.imgQuality.value = b.image.quality; els.textInImage.checked = b.image.textInImage; els.proof.checked = b.image.proof !== false; els.refs.checked = b.image.refs !== false;
+    els.imgModel.value = b.image.model; els.imgQuality.value = b.image.quality; els.textInImage.checked = b.image.textInImage; els.proof.checked = b.image.proof !== false; els.refs.checked = b.image.refs !== false; els.leanRefs.checked = Boolean(b.image.leanRefs); els.draftFirst.checked = b.image.draftFirst !== false;
     els.pageStyle.value = b.image.pageStyle || 'classic'; renderPageStyleHint();
     if (![...els.imgSize.options].some((o) => o.value === b.image.size)) fillSelect(els.imgSize, [...config.sizePresets, { id: b.image.size, label: b.image.size }], b.image.size);
     els.imgSize.value = b.image.size;
@@ -1481,6 +1481,12 @@ async function illustrateMissing() {
   if (subtab !== 'pages' && !reading) { subtab = 'pages'; renderAll(); }
   const todo = missingPictures();
   if (!todo.length) { setStatus('Every page already has a picture. Use 🎨 Try another picture on a page to redo it.', 'ok'); return; }
+  // Draft first (Brief & settings): pages with no up-to-date draft are drafted before any full picture is paid for.
+  if (book.image.draftFirst !== false && !book.fromSeries && todo.some((p) => !p.draftCurrent)) {
+    subtab = 'prompts'; reading = false; renderAll();
+    setStatus('“Draft first” is on: pages without an up-to-date draft are sketched first. Look the drafts over, then illustrate.', 'ok');
+    return draftAll();
+  }
   const each = estimateImageCost(book.image.model, book.image.size, book.image.quality);
   const unlinked = book.cast.filter((c) => !c.characterId);
   const warn = unlinked.length ? `\n\nHeads up: ${unlinked.map((c) => c.name).join(', ')} ${unlinked.length > 1 ? 'are' : 'is'} described in words only and may look different on every page. Cancel and use 🎨 Design character first for consistency.` : '';
@@ -1597,7 +1603,7 @@ async function init() {
   els.pageCount.addEventListener('change', () => { const v = snapFours(els.pageCount.value); if (Number(els.pageCount.value) !== v) { els.pageCount.value = v; if (book) queue({ brief: briefFromForm() }); } });
   for (const el of [els.premise, els.tone, els.themeBrief, els.setting, els.style, els.briefNotes, els.pageCount]) el.addEventListener('input', () => { renderBriefGaps(); if (book) queue({ brief: briefFromForm() }); });
   els.audience.addEventListener('change', () => { if (book) { queue({ brief: briefFromForm() }); book.brief.audience = els.audience.value; if (book.pages.length && !reading) renderPages(); } });
-  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage, els.proof, els.refs, els.pageStyle]) el.addEventListener('change', () => { renderArtSummary(); renderPageStyleHint(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); if (el === els.pageStyle) flush().then(() => api('GET', `/api/books/${book.id}`)).then((b) => { book = b; renderAll(); }).catch(() => {}); else refreshFlow(); } });
+  for (const el of [els.imgModel, els.imgQuality, els.imgSize, els.textInImage, els.proof, els.refs, els.leanRefs, els.draftFirst, els.pageStyle]) el.addEventListener('change', () => { renderArtSummary(); renderPageStyleHint(); if (book) { book.image = imageFromForm(); queue({ image: book.image }); if (el === els.pageStyle) flush().then(() => api('GET', `/api/books/${book.id}`)).then((b) => { book = b; renderAll(); }).catch(() => {}); else refreshFlow(); } });
   els.title.addEventListener('input', () => queue({ title: els.title.value }));
   els.logline.addEventListener('input', () => { queue({ logline: els.logline.value }); els.headLogline.textContent = els.logline.value; });
   els.theme.addEventListener('input', () => queue({ theme: els.theme.value }));

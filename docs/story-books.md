@@ -77,6 +77,8 @@ once with the mistakes listed (a second paid picture) and the attempt with fewer
 under the picture (✓ or ⚠ with **Redraw fixing these**). Switch it off with **Proofread** in Brief & settings
 (`image.proof`). Books copied from Flash Cards skip both readers.
 
+**Spending less on pictures.** *Draft first* (Brief & settings, on by default) paints a page only once it has an up-to-date draft; ✨ Illustrate drafts the pages that lack one and stops so you can look them over. A page that already has a picture can be redrawn freely, and books made from a card series are not affected. *Lean references* (off by default) sends one picture per character (its reference sheet when it has one) and leaves out the style-only earlier page when every character on the page has references of its own. Compare a few pages with and without it first.
+
 Illustrations are normal History records titled `<book> — page N` and tagged `book`, `<book-slug>`, `page-N`. **📖 Preview**
 shows the book as pages (and prints one page per sheet); **⬇ Manuscript** exports Markdown with text, briefs and image paths.
 **🖨 Print Sheets** lays the book out for double-sided printing and opens it in Print Sheets (flip on the long

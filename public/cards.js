@@ -6,7 +6,7 @@ const els = {
   tplInstructions: $('tpl-instructions'), makeTemplate: $('make-template'), analyzeSelected: $('analyze-selected'), suggestGroups: $('suggest-groups'),
   tplList: $('tpl-list'),
   seriesSelect: $('series-select'), newSeries: $('new-series'), deleteSeries: $('delete-series'), template: $('template'), styleTemplate: $('style-template'),
-  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), logic: $('logic'), checkLogic: $('check-logic'), readback: $('readback'), checkReadback: $('check-readback'), autoFix: $('auto-fix'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
+  premise: $('premise'), premiseLabel: $('premise-label'), topics: $('topics'), lesson: $('lesson'), foundation: $('foundation'), editorNotes: $('editor-notes'), logic: $('logic'), checkLogic: $('check-logic'), readback: $('readback'), checkReadback: $('check-readback'), autoFix: $('auto-fix'), leanRefs: $('lean-refs'), draftFirst: $('draft-first'), world: $('world'), audience: $('audience'), cardCount: $('card-count'), tone: $('tone'), notes: $('notes'), briefChars: $('brief-chars'),
   artSummary: $('art-summary'), imgModel: $('img-model'), imgQuality: $('img-quality'), imgSize: $('img-size'), textMode: $('text-mode'), redrawAll: $('redraw-all'), proof: $('proof'), draftAll: $('draft-all'), extras: $('extras'), makePlaces: $('make-places'), makeExtras: $('make-extras'), tidy: $('tidy'), useTemplateRef: $('use-template-ref'), chain: $('chain'), badge: $('badge'),
   stepper: $('stepper'), flowRow: $('flow-row'), next: $('next'), stop: $('stop'), upscale: $('upscale'), saveState: $('save-state'), status: $('status'), strip: $('strip'),
   progress: $('progress'), progressPhase: $('progress-phase'), progressTime: $('progress-time'), progressBar: $('progress-bar'), progressSnippet: $('progress-snippet'),
@@ -377,7 +377,7 @@ const currentTemplate = () => templates.find((t) => t.id === (series?.brief.temp
 const audience = () => config.cards.audiences.find((a) => a.id === (series?.brief.audience || els.audience.value)) || config.cards.audiences[0];
 const readBrief = () => ({ kind: kind(), templateId: els.template.value, styleTemplateId: els.styleTemplate.value, premise: els.premise.value, topics: els.topics.value, lesson: els.lesson.value, audience: els.audience.value,
   cardCount: countFor(kind(), els.cardCount.value), tone: els.tone.value, notes: els.notes.value, characterIds: [...briefChars], basedOn: els.basedOn.value });
-const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, autoFix: els.autoFix.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
+const readImage = () => ({ model: els.imgModel.value, quality: els.imgQuality.value, size: els.imgSize.value, textMode: els.textMode.value, proof: els.proof.checked, autoFix: els.autoFix.checked, leanRefs: els.leanRefs.checked, draftFirst: els.draftFirst.checked, useTemplateRef: els.useTemplateRef.checked, chain: els.chain.checked, badge: els.badge.checked });
 function writeBrief() {
   const b = series?.brief, im = series?.image;
   document.querySelector(`input[name=kind][value=${b?.kind || 'set'}]`).checked = true;
@@ -387,7 +387,7 @@ function writeBrief() {
   fillBasedOn();
   if (im) { els.imgModel.value = im.model; els.imgQuality.value = im.quality; ensureSize(im.size); }
   els.textMode.value = im?.textMode || 'captions';
-  els.proof.checked = im?.proof ?? true; els.autoFix.checked = im?.autoFix ?? true;
+  els.proof.checked = im?.proof ?? true; els.autoFix.checked = im?.autoFix ?? true; els.leanRefs.checked = im?.leanRefs ?? false; els.draftFirst.checked = im?.draftFirst ?? true;
   els.useTemplateRef.checked = im?.useTemplateRef ?? true; els.chain.checked = im?.chain ?? true; els.badge.checked = im?.badge ?? true;
   renderBriefChars(); kindChanged(); artSummary();
 }
@@ -468,7 +468,7 @@ for (const [el, k] of [[els.premise, 'premise'], [els.topics, 'topics'], [els.le
   });
 }
 for (const r of document.querySelectorAll('input[name=kind]')) r.addEventListener('change', () => { kindChanged(); if (series) { series.brief.kind = kind(); queue({ brief: { kind: kind() } }); } });
-for (const [el, k] of [[els.imgModel, 'model'], [els.imgQuality, 'quality'], [els.imgSize, 'size'], [els.textMode, 'textMode'], [els.proof, 'proof'], [els.autoFix, 'autoFix'], [els.useTemplateRef, 'useTemplateRef'], [els.chain, 'chain'], [els.badge, 'badge']]) {
+for (const [el, k] of [[els.imgModel, 'model'], [els.imgQuality, 'quality'], [els.imgSize, 'size'], [els.textMode, 'textMode'], [els.proof, 'proof'], [els.autoFix, 'autoFix'], [els.useTemplateRef, 'useTemplateRef'], [els.chain, 'chain'], [els.badge, 'badge'], [els.leanRefs, 'leanRefs'], [els.draftFirst, 'draftFirst']]) {
   el.addEventListener('change', () => { artSummary(); if (series) queue({ image: { [k]: el.type === 'checkbox' ? el.checked : el.value } }); refreshFlow(); });
 }
 
@@ -614,11 +614,14 @@ async function illustrate(cardId, body = {}) {
     return r;
   } finally { el?.classList.remove('working'); }
 }
-async function draftAll() {
+// Sketch first (Picture settings): a card with no sketch, or whose script changed since its sketch, is sketched before
+// any final picture is paid for. The server refuses the final picture of such a card as well.
+const needsSketch = (c) => els.draftFirst.checked && Boolean(c.title) && (!c.imageId || Boolean(c.draft && c.stale));
+async function draftAll(cards) {
   stopRequested = false; els.stop.hidden = false; els.stop.disabled = false;
   await run('Sketching the storyboard', async (onProgress) => {
     await flush();
-    const todo = series.cards.filter((c) => c.title && !c.imageId); let done = 0, spent = 0;
+    const todo = Array.isArray(cards) ? cards : series.cards.filter((c) => c.title && !c.imageId); let done = 0, spent = 0;
     for (const c of todo) {
       if (stopRequested) break;
       onProgress({ phase: `Sketching card ${c.n} of ${series.cards.length}`, done, total: todo.length, snippet: c.title });
@@ -629,7 +632,7 @@ async function draftAll() {
   });
   els.stop.hidden = true;
 }
-els.draftAll.addEventListener('click', draftAll);
+els.draftAll.addEventListener('click', () => draftAll());
 async function seriesAction(label, path, body, done) {
   await run(label, async () => { await flush(); const r = await api('POST', `/api/cards/series/${series.id}/${path}`, body || {}); series = r.series; for (const rec of r.records || []) records.set(rec.id, rec); renderSeries(); setStatus(done(r), 'ok'); });
 }
@@ -652,6 +655,8 @@ els.redrawAll.addEventListener('click', () => {
   if (confirm(`Redraw all ${n} cards with the current picture settings${est ? ` (≈ ${fmtCost(est * n)})` : ''}? The pictures you have now are kept as earlier versions of each card.`)) illustrateAll(true);
 });
 async function illustrateAll(all = false) {
+  const unsketched = (Array.isArray(all) ? all : all === true ? series.cards.filter((c) => c.title) : unpictured()).filter(needsSketch);
+  if (unsketched.length) return draftAll(unsketched);   // look the sketches over on the storyboard, then approve
   stopRequested = false; els.stop.hidden = false; els.stop.disabled = false;
   await run('Illustrating', async (onProgress) => {
     await flush();
@@ -982,6 +987,7 @@ els.cards.addEventListener('click', async (e) => {
   if (variant) { c.imageId = variant.dataset.variant; queue({ cards: [{ id: c.id, imageId: c.imageId }] }); return renderCards(); }
   if (chip) { const n = chip.dataset.cast; c.characters = c.characters.includes(n) ? c.characters.filter((x) => x !== n) : [...c.characters, n]; chip.classList.toggle('on'); return queue({ cards: [{ id: c.id, characters: c.characters }] }); }
   if (act === 'write') return write([c.id], e.target.closest('.rewrite').querySelector('input').value);
+  if (act === 'image' && needsSketch(c)) return run(`Sketching card ${c.n} first`, async () => { await flush(); await illustrate(c.id, { draft: true }); renderSeries(); setStatus(`Card ${c.n} sketched first (“Sketch first” is on in Picture settings). Look it over, then illustrate it for the final picture.`, 'ok'); });
   if (act === 'image' || act === 'fix') return run(`Illustrating card ${c.n} (about a minute)`, async () => {
     await flush(); const r = await illustrate(c.id, act === 'fix' ? { fixNotes: c.check?.fixNotes || '' } : {}); renderSeries();
     setStatus(`Card ${c.n} illustrated.${r.check ? (r.check.pass ? ' The proofreader passed it.' : ' The proofreader still flags something — see ⚠ on the card.') : ''}`, r.check && !r.check.pass ? 'error' : 'ok');

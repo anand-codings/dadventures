@@ -700,7 +700,11 @@ export function createCards(deps) {
     // textMode: 'captions' = short captions, play box and a line for grown-ups (the story is read from the script);
     // 'story' = a short story paragraph printed on the card itself, so the cards can be read without the script.
     const textMode = ['captions', 'story'].includes(v.textMode) ? v.textMode : prev.textMode || 'captions';
-    return { model, quality, size, textMode, useTemplateRef: flag('useTemplateRef', true), chain: flag('chain', true), badge: flag('badge', true), proof: flag('proof', true), autoFix: flag('autoFix', true) };
+    // leanRefs: one reference picture per character and no neighbouring card when the characters and the style template
+    // already carry the look (references are about half of what a picture costs). Off until compared side by side.
+    // draftFirst: a final picture is only drawn for a card that has an up-to-date sketch (or already has a final picture).
+    return { model, quality, size, textMode, useTemplateRef: flag('useTemplateRef', true), chain: flag('chain', true), badge: flag('badge', true), proof: flag('proof', true), autoFix: flag('autoFix', true),
+      leanRefs: flag('leanRefs', false), draftFirst: flag('draftFirst', true) };
   }
   const newCard = (n, fields = {}) => ({ id: crypto.randomUUID(), n, topic: '', beat: '', place: '', draft: false, check: null, stale: null, prints: {}, chapter: '', arc: '', purpose: '', feeling: '', state: '', layout: '', setting: '', play: '', title: '', subtitle: '', tagline: '', hero: '', slots: [], closing: '', source: '', characters: [], narration: '', storyText: '', imageId: null, imageIds: [], ...fields });
   // Cast names as a model returns them or an author types them ("Ollie", "ollie the octopus"), matched to the cast's spelling.
@@ -1088,7 +1092,10 @@ export function createCards(deps) {
     const place = (s.places || []).find((pl) => pl.name && pl.name === card.place && pl.imageId);
     const placeFile = place && deps.recordFile && await deps.recordFile(place.imageId);
     if (placeFile) { const buf = await fsp.readFile(placeFile).catch(() => null); if (buf) refs.push({ dataUrl: `data:image/png;base64,${buf.toString('base64')}`, label: `place: ${place.name}`, text: `location reference for "${place.name}". Set this card there: keep its landmarks, rock and plant shapes and overall arrangement, seen from whatever angle suits the picture. It shows no characters; take characters only from their own references.` }); }
-    if (s.image.chain && deps.recordFile && !opts.draft) {
+    // Lean references: the neighbouring card is there for the look of the characters and of the set. When every character
+    // on the card has its own reference and the style template's example is attached, those carry both.
+    const carried = s.image.leanRefs && opts.everyoneLinked && refs.some((r) => /^(style|template): /.test(r.label));
+    if (s.image.chain && deps.recordFile && !opts.draft && !carried) {
       // The nearest finished card set in the same place whose picture passed proofreading; failing that the nearest good card.
       // (Always using the first card pulled its cast and props into every later picture.)
       const done = s.cards.filter((c) => c.imageId && c.id !== card.id), real = done.filter((c) => !c.draft);
@@ -1183,13 +1190,14 @@ MINOR is everything else: exact counts of background things, details of props an
     // A draft sketch sends no reference images (they are most of the cost): characters are drawn from their descriptions.
     const prompt = cardPrompt(s, card, t, { fixNotes: opts.fixNotes, describeAll: Boolean(opts.draft) });
     const drawnFrom = printSig(s, card, t);
-    const refs = opts.draft ? [] : await referenceImages(s, card, t, opts);
+    const everyoneLinked = card.characters.length > 0 && card.characters.every((n) => s.cast.some((c) => c.name === n && characterIds.includes(c.characterId)));
+    const refs = opts.draft ? [] : await referenceImages(s, card, t, { ...opts, everyoneLinked });
     if (opts.draft) characterIds.length = 0;
     const label = `${s.cards.length > 1 ? `${s.title || 'Series'} — ${card.n}. ${card.title}` : card.title}${opts.draft ? ' (draft)' : s.image.textMode === 'story' && s.brief.kind === 'story' ? ' (story on card)' : ''}`;
     const r = await handleGenerate({
       prompt, originalPrompt: `${card.title}${card.subtitle ? ` — ${card.subtitle}` : ''}`.slice(0, 200), model: s.image.model, quality: opts.draft ? 'low' : s.image.quality, size: s.image.size, n: 1, format: 'png',
       characterIds, tags: ['flash-card', slugify(s.title || 'series'), `card-${card.n}`, ...(opts.draft ? ['draft'] : [])],
-    }, { refs, meta: { card: { seriesId: s.id, cardId: card.id, n: card.n, draft: Boolean(opts.draft), templateId: t.layout.id, styleTemplateId: t.style?.id || null } }, ai: { feature: 'card_image', refs: { seriesId: s.id } } });
+    }, { refs, meta: { card: { seriesId: s.id, cardId: card.id, n: card.n, draft: Boolean(opts.draft), templateId: t.layout.id, styleTemplateId: t.style?.id || null } }, ai: { feature: 'card_image', refs: { seriesId: s.id } }, leanRefs: Boolean(s.image.leanRefs) });
     const rec = await handleUpdate(r.images[0].id, { title: label.slice(0, 120) });
     const updated = await withSeries(id, (x) => {
       const c = x.cards.find((k) => k.id === cardId);
@@ -1204,6 +1212,13 @@ MINOR is everything else: exact counts of background things, details of props an
   // pictures for a final card and two for a draft sketch; the attempt with the fewest problems stays selected.
   async function handleCardImage(id, cardId, body = {}) {
     const draft = Boolean(body.draft);
+    if (!draft) {
+      // Sketch first: a final picture costs several times a sketch, so it is only drawn once the card's composition has
+      // been seen. A card that already has a final picture can be redrawn freely.
+      const s0 = await getSeries(id), c0 = s0.cards.find((c) => c.id === cardId);
+      if (s0.image.draftFirst !== false && c0 && c0.title && (!c0.imageId || (c0.draft && c0.stale)))
+        throw new HttpError(409, c0.imageId ? `Card ${c0.n} was changed after its sketch was drawn. Sketch it again and look it over before drawing the final picture.` : `Card ${c0.n} has no sketch yet. Sketch it and look it over before drawing the final picture (or switch off “Sketch first” in Picture settings).`);
+    }
     const first = await drawCard(id, cardId, { draft, fixNotes: clampStr(body.fixNotes, 2000) });
     const proof = 'proof' in body ? Boolean(body.proof) : first.series.image.proof !== false;
     if (!proof) return first;
