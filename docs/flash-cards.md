@@ -64,6 +64,8 @@ three pictures per card; turn off *fill in the brief and redraw without asking* 
 proofread too, for who is where only. **📖 Read the story back from the pictures** shows every finished picture to a reader who
 has not seen the script, and lists the cards where the pictures tell a different story from the words.
 
+**Spending less on pictures.** Reference pictures are about half of what a final card costs (roughly a cent each, on every card). Two Picture settings address that. *Sketch first* (on by default) draws a final picture only for a card with an up-to-date sketch: a card with no sketch, or whose script changed since its sketch, is sketched instead, so the composition is seen before it is paid for. A card that already has a final picture can be redrawn freely. *Lean references* (off by default) sends each character's reference sheet alone instead of all of its pictures, and leaves out the neighbouring card when every character on the card has a reference and the style template's example picture is attached. Compare a few cards with and without it before using it for a whole series.
+
 **Checking and finishing a story.** With *Proofread every card* on (Picture settings), each new picture is read by a vision
 model against its script: every lettered word, who is in each panel, the hidden friend. Story-breaking problems trigger one
 automatic redraw; anything still wrong is shown on the card with ⚠ and a *Redraw fixing these* button, and small
