@@ -27,6 +27,8 @@ export const PRICING = {
     'gpt-image-2.6-flare': IMAGE_RATES, 'gpt-image-2.6-sunburst': IMAGE_RATES,
     'gpt-image-2.5-flare': IMAGE_RATES, 'gpt-image-2.5-sunburst': IMAGE_RATES,
   },
+  // Decisions API (/v1/decisions): input tokens only; answers are free. Checked 2026-11-12 in the Decisions guide.
+  decision: { 'gpt-6-luna': { input: 0.1, output: 0 } },
   checked: '2026-11-09', source: 'https://developers.openai.com/api/docs/pricing',
 };
 // Shape the browser config has always exposed for image token rates.
@@ -221,6 +223,34 @@ export function createAi({ OUTPUT_DIR, OPENAI_API_KEY = '', FAL_KEY = '', HttpEr
     if (schema) { try { parsed = JSON.parse(out); } catch { return fail('The model did not return valid JSON.'); } }
     const entry = await done(true, 200, null);
     return { text: out, parsed, usage, costUsd: entry.costUsd, durationMs: entry.durationMs, callId: entry.id };
+  }
+
+  // ---------- OpenAI decisions (typed answers: yes/no probability, choice, score) ----------
+  // { feature, refs, input, questions } → { answers: { name: answer }, usage, costUsd, durationMs, callId }.
+  // input is a string or Responses-style user messages (input_text / input_image parts); each question is
+  // { type: 'predicate' | 'choice' | 'score', name, instructions, … }. Far cheaper and faster than a text call, with
+  // nothing to parse: use it for one narrow judgment at a time ("do these two pictures repeat each other?").
+  async function decide({ feature, refs, model = 'gpt-6-luna', input, questions }) {
+    if (!OPENAI_API_KEY) throw new HttpError(500, 'OPENAI_API_KEY is not set.');
+    const call = begin('openai', 'text', { feature, refs, model, endpoint: '/v1/decisions' });
+    const body = { model, input, questions };
+    const [request, imagesIn] = redact(body);
+    let usage = null, json = null;
+    const done = (ok, status, error) => {
+      const { costUsd, rates } = priceUsage('decision', model, usage);
+      return record(finish(call, { ok, status, error, usage, costUsd: usage ? costUsd : (ok ? null : 0), rates, imagesIn, inputPreview: questions.map((q) => q.instructions).join(' | ').slice(0, 2000), outputPreview: JSON.stringify(json?.answers || '') }),
+        { request, response: json || { error: error || null } });
+    };
+    const fail = async (message, status = 502) => { await done(false, status, message); throw new HttpError(httpStatus(status), message); };
+    let res;
+    try {
+      res = await fetch('https://api.openai.com/v1/decisions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch (e) { return fail(`OpenAI: network error — ${e.message}`); }
+    json = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(json?.answers)) return fail(json?.error?.message || `OpenAI error ${res.status}`, res.ok ? 502 : res.status);
+    usage = json.usage || null;
+    const entry = await done(true, 200, null);
+    return { answers: Object.fromEntries(json.answers.map((a, i) => [a.name || questions[i]?.name || String(i), a])), usage, costUsd: entry.costUsd, durationMs: entry.durationMs, callId: entry.id };
   }
 
   // ---------- OpenAI images ----------
@@ -466,5 +496,5 @@ export function createAi({ OUTPUT_DIR, OPENAI_API_KEY = '', FAL_KEY = '', HttpEr
     return { skipped: false, imported: out.length };
   }
 
-  return { text, image, falUpscale, localUpscale, readCalls, readCall, backfill, ledgerFile: LEDGER };
+  return { text, decide, image, falUpscale, localUpscale, readCalls, readCall, backfill, ledgerFile: LEDGER };
 }

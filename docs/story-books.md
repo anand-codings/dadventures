@@ -46,7 +46,9 @@ illustrated.
   It changes words, never the story; a change that moves a page further outside the word range is refused; what it changed
   is listed above the pages and ↶ Undo restores the text. A partial rewrite calls it only for pages that came back outside
   the range. Pages still outside the range are named next to the page count.
-- **Reference pictures** (Pictures → Consistency, on by default): each new picture is drawn with the nearest finished page
+- **Reference pictures** (Pictures → Consistency, on by default): a book with a world sheet is drawn with the sheet and
+  no neighbouring page, because the image model copies a same-place page's layout whatever the prompt says, and a run of
+  pages in one place turns into one picture. A book without a world sheet is drawn with the nearest finished page
   set in the same place beside it (pages whose picture failed proofreading are skipped), or failing that the nearest
   finished page as a style reference. **☆ Use as style anchor** pins one page as the style for all the others.
   **🎨 Draw the world sheet** (Outline tab, `POST /api/books/:id/world-sheet`, one paid 1024² picture) draws the places and
@@ -89,6 +91,20 @@ arriving somewhere new goes wide, and no set-up repeats within three pages. The 
 prompt and outranks viewing rules in the world note; the story world is limited to the page's own place, and the reference
 page is shown for rendering only, never for its framing. Redrawing a book in page order lets each page use a newly varied
 neighbour as its reference.
+
+**Catching look-alike pages before paying for them.**
+- The **outline** is written to a rule of at most three pages in a row in one place with the same characters, and the
+  Outline tab names any longer run under the shot row, with a button that puts the fix into the re-draft box.
+- Each **picture brief is written for its page's camera**: the writer is given the camera set-up chosen for the page and
+  stages the scene for it, changes the arrangement from the page before, and lists only the characters in the frame.
+- **✏️ Draft pages** (Picture prompts tab, `POST /api/books/:id/pages/:pageId/draft`) draws every page without a picture
+  as a small low-quality sketch, shown side by side on a sheet. A page whose prompt is unchanged since its draft is then
+  painted with the draft beside it as the composition.
+- **👀 Check for look-alike pages** (`POST /api/books/:id/similar`) shows each pair of neighbouring pages (drafts or
+  pictures) to OpenAI's Decisions API (`gpt-6-luna`, a yes/no probability per pair, a fraction of a cent for a book)
+  and marks the pairs that would read as the same picture.
+- The **proofreader** also sees the page before: a picture that repeats its camera and arrangement fails and is redrawn
+  once, as does one that shows a different number of something than the page states ("seven arms hold on").
 
 **Page types.** *Brief & settings → Pictures → Page style*: **Classic picture book** (one picture and the story text per
 page), **Mixed toddler pages** (full pictures and 2–4 panel scenes with tiny captions, a play box such as "Can you find…?",
